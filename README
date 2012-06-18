@@ -26,6 +26,17 @@ bench/   -> a series of benchmarks to compare Dune and Linux performance
 test/    -> simple test programs and examples
 sandbox/ -> a generic implementation for sandboxing untrusted binaries
 
+Requirements
+============
+
+* A recent Intel CPU (probably Nehalem and later) with VT-x support.
+* A recent kernel version --- We use 3.0 and later, but earlier versions
+  may also work.
+* Installed kernel headers for the active kernel.
+
+We provide a script called dune_req.sh that will attempt to verify
+if these requirements are met.
+
 Limitations
 ===========
 
