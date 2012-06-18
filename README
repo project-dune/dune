@@ -1,0 +1,97 @@
+This file contains basic information about User-level Supervisor Mode (USM)
+and installation instructions.
+
+Overview
+========
+
+USM is a project that uses hardware virtualization to grant user-level
+software direct access to X86 hardware. This introduces application
+developers to a new layer of interposition that rests between the kernel
+and the process. The figure below illustrates a high-level view of the
+USM architecture.
+
+CPL 3 [Process]
+CPL 0 [Process Supervisor] <- New layer
+S     [Kernel] [USM Hypervisor]
+
+This arrangement enables a variety of new capabilities, not normally
+available to application writers. Some highlights include the following:
+- Full access to hardware paging (including dirty bits, large pages,
+  global pages, tagged TLBs, etc.)
+- Full access to the CPU's ring security model
+- Other X86 architectural features like debug registers, timers, etc.
+
+USM runs on top of Linux through a dynamically loadable kernel module.
+Any Linux process can be transitioned to USM mode. Code to enter USM mode
+is included in a library called libusm, The intention of libusm is to make
+it easier to construct USM-aware applications. To this end it includes
+a variety of memory management primitives and other basic OS structures.
+
+USM is different from traditional virtualization such as KVM in a couple
+ways. First, although the possibility of library OSes is not precluded,
+the primary goal of USM is not to serve as a platform for guest operating
+systems. Rather, USM is designed to expose more hardware features to
+regular Linux processes. Second, a USM environment is much more simplistic
+and streamlined than a typical virtualization environment because it lacks
+emulation of hardware IO registers, MSRs, and SMP. It mimicks a normal Linux
+process environment as much as possible, exposing the set of Linux system
+calls as its only interface.
+
+Right now USM is a research prototype, but it is starting to get fairly
+stable and should be suitable for a variety of interesting experiments.
+
+
+Installation
+============
+
+Step One: libc
+
+USM performs system calls with the 'vmcall' instruction rather than
+'sysenter', 'syscall', or 'int 80'. As a result, it is necessary to patch
+libc in order to be compatible with this new entry mechanism. A patch
+against glibc is included in this source repository. It allows libc
+to remain compatible with regular Linux processes while also making use
+of USM-mode system calls when it is required. Setup is as follows:
+
+1.) start in the USM root directory
+2.) wget http://ftp.gnu.org/gnu/glibc/glibc-2.14.1.tar.bz2
+3.) tar -xvvjf glibc-2.14.1.tar.bz2
+4.) cd glibc-2.14.1
+5.) cat ../glibc-2.14.1.diff | patch -p1 -d ./
+6.) mkdir ../glibc-build
+7.) cd ../glibc-build
+8.) ../glibc-2.14.1/configure
+9.) make
+
+No need to run 'make install'. Rather, the net result is 'libc.so.6' in
+the 'glibc-build' directory. Just leave it there for later.
+
+Step Two: USM kernel module (hypervisor)
+
+1.) start in the 'kern' directory
+2.) make
+3.) (as root) insmod ./usm.ko
+
+NOTE: The symbols.map file is required because the USM kernel module needs
+access to the system call table. You may need to modify the Makefile if you
+keep your symbols.map in a different location.
+
+Step Three: USM user tools
+1.) start in the 'user' directory
+2.) make
+
+Three files are produced, libusm.a, usmbench, and linbench. usmbench and
+linbench perform a variety of benchmarks that are useful in comparing the
+performance characteristics of USM and standard Linux.
+
+Note that the source code of usmbench is very useful in understanding the
+USM API.
+
+Step Four: Running a USM process
+
+1.) start in the 'user' directory.
+2.) LD_PRELOAD=../glibc-build/libc.so.6 ./usmbench
+
+And that's it. You should see a bunch of benchmark output if it is working
+correctly. You might need to run as root, although it is not necessary if
+you set the permissions of '/dev/usm' appropriately.

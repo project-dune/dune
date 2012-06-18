@@ -1,0 +1,379 @@
+/*
+ * dune.S - assembly helper routines (e.g. system calls, interrupts, traps)
+ */
+
+
+#define MSR_FS_BASE	0xc0000100
+#define GD_KT		0x10
+#define GD_KD		0x18
+#define GD_UD		0x28 | 0x03
+#define GD_UT		0x30 | 0x03
+
+/*
+ * Trap Frame Format
+ * NOTE: this reflects the layout of struct dune_tf
+ */
+
+/* arguments */
+#define RDI	(0)
+#define RSI	(8)
+#define RDX	(16)
+#define RCX	(24)
+#define R8	(32)
+#define R9	(40)
+
+/* other registers */
+#define R10	(48)
+#define R11	(56)
+#define RBX	(64)
+#define RBP	(72)
+#define R12	(80)
+#define R13	(88)
+#define R14	(96)
+#define R15	(104)
+
+#define REG_END	(112)
+
+/* syscall num / return code */
+#define RAX	(112)
+
+/* exception frame */
+#define ERR	(120)
+#define RIP	(128)
+#define CS	(136)
+#define RFLAGS	(144)
+#define RSP	(152)
+#define SS	(160)
+
+#define EF_START (128)
+#define TF_END	(168)
+
+/*
+ * Supervisor Private Area Format
+ */
+
+#define TMP		(0)
+#define KFS_BASE	(8)
+#define UFS_BASE	(16)
+#define TRAP_STACK	(28)
+
+.data
+stack:
+	.long	0
+
+.text
+
+# This routine restores process state after a DUNE mode transition
+.globl	__dune_ret
+__dune_ret:
+	movq	stack, %rsp
+	popq	%rbp
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%r11
+	popq	%r10
+	popq	%r9
+	popq	%r8
+	popq	%rdi
+	popq	%rsi
+	popq	%rdx
+	popq	%rcx
+	popq	%rbx
+	# Note that %rax is set to zero by the hyperviser.
+	# Otherwise, if this is a failed entry it will be
+	# set by the ioctl() syscall.
+	retq
+
+# This routine invokes a transition to DUNE mode
+.globl __dune_enter
+__dune_enter:
+	pushq	%rbx
+	pushq	%rcx
+	pushq	%rdx
+	pushq	%rsi
+	pushq	%rdi
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+	pushq	%rbp
+	movq %rsp, stack
+	movq %rsi, %rdx
+	movq $0x8018e901, %rsi /* XXX DUNE_ENTER */
+	movq $16, %rax
+	syscall
+
+	# should only make it here if entry fails
+	jmp __dune_ret
+
+/*
+ * macro to save destructable register state
+ */
+	.macro SAVE_REGS save_full=1, include_rax=1
+	movq	%rdi, RDI(%rsp)
+	movq	%rsi, RSI(%rsp)
+	movq	%rdx, RDX(%rsp)
+	movq	%r8, R8(%rsp)
+	movq	%r9, R9(%rsp)
+
+	.if \save_full
+	movq	%r10, R10(%rsp)
+	movq	%r11, R11(%rsp)
+	movq	%rcx, RCX(%rsp)
+	.endif
+
+	.if \include_rax
+	movq	%rax, RAX(%rsp)
+	.endif
+	.endm
+
+/*
+ * macro to save the rest of register state
+ *
+ * useful for operations that violate AMD64 calling conventions
+ * by destroying callee restored state
+ */
+	.macro SAVE_REST
+	movq	%rbx, RBX(%rsp)
+	movq	%rbp, RBP(%rsp)
+	movq	%r12, R12(%rsp)
+	movq	%r13, R13(%rsp)
+	movq	%r14, R14(%rsp)
+	movq	%r15, R15(%rsp)
+	.endm
+
+/*
+ * macro to restore destructable register state
+ */
+	.macro RESTORE_REGS rstor_full=1, include_rax=1
+	.if \include_rax
+	movq	RAX(%rsp), %rax
+	.endif
+
+	.if \rstor_full
+	movq	RCX(%rsp), %rcx
+	movq	R11(%rsp), %r11
+	movq	R10(%rsp), %r10
+	.endif
+
+	movq	R9(%rsp), %r9
+	movq	R8(%rsp), %r8
+	movq	RDX(%rsp), %rdx
+	movq	RSI(%rsp), %rsi
+	movq	RDI(%rsp), %rdi
+	.endm
+
+/*
+ * macro to restore the rest of register state
+ *
+ * useful for operations that violate AMD64 calling conventions
+ * by destroying callee restored state
+ */
+	.macro RESTORE_REST
+	movq	R15(%rsp), %r15
+	movq	R14(%rsp), %r14
+	movq	R13(%rsp), %r13
+	movq	R12(%rsp), %r12
+	movq	RBP(%rsp), %rbp
+	movq	RBX(%rsp), %rbx
+	.endm
+
+# System Call ABI
+# ---------------
+#
+# User Parameters:
+# %rsp - stack pointer
+# %rcx - instruction pointer
+# %r11 - eflags
+# %rax - system call number
+#
+# Arguments:
+# %rdi - arg0, %rsi - arg1, %rdx - arg2
+# %r10 - arg3, %r8 - arg4, %r9 - arg5
+#
+# Return code goes in %rax
+
+# XXX don't do relative jumps - watch out code is memcpy
+.globl __dune_syscall
+__dune_syscall:
+	/* first switch to the kernel stack */
+	movq	%rsp, %gs:TMP
+	movq	%gs:TRAP_STACK, %rsp
+
+	/* now push the trap frame onto the stack */
+	subq	$TF_END, %rsp
+	movq	%rcx, RIP(%rsp)
+	movq	%r11, RFLAGS(%rsp)
+	movq	%r10, RCX(%rsp) /* fixup to standard 64-bit calling ABI */
+	SAVE_REGS 0, 1
+	movq	%gs:TMP, %rax
+	movq	%rax, RSP(%rsp)
+
+	/* then restore the CPL0 FS base address */
+	movq	%gs:KFS_BASE, %rax
+	movq	%gs:UFS_BASE, %rdi
+	cmp	%rax, %rdi
+	je	__dune_syscall_handle
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+
+__dune_syscall_handle:
+	/* then finally re-enable interrupts and jump to the handler */
+	sti
+	movq	%rsp, %rdi /* argument 0 */
+	lea	dune_syscall_handler, %rax
+	call	*%rax
+
+	/* next restore the CPL3 FS base address */
+	movq	%gs:UFS_BASE, %rax
+	movq	%gs:KFS_BASE, %rdi
+	cmp	%rax, %rdi
+	je	__dune_syscall_restore
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+
+__dune_syscall_restore:
+	/* then pop the trap frame off the stack */
+	RESTORE_REGS 0, 1
+	movq	RCX(%rsp), %r10
+	movq	RFLAGS(%rsp), %r11
+	movq	RIP(%rsp), %rcx
+
+	/* switch to the user stack and return to ring 3 */
+	movq	RSP(%rsp), %rsp
+	sysretq
+
+.globl __dune_syscall_end
+__dune_syscall_end:
+	nop
+
+.globl dune_pop_trap_frame
+dune_pop_trap_frame:
+	movq	%rdi, %rsp /* might actually not be a stack!!! */
+
+	/* load the full register state */
+	RESTORE_REGS
+	RESTORE_REST
+
+	/* jump to the frame */
+	addq	$EF_START, %rsp
+	iretq
+
+.globl dune_jump_to_user
+dune_jump_to_user:
+	subq	$TF_END, %rsp
+
+	/* save the full register state */
+	SAVE_REGS
+	SAVE_REST
+	lahf
+	movq	%rax, RFLAGS(%rsp)
+
+	/* save the stack pointer */
+	movq	%rsp, %gs:TRAP_STACK
+
+	/* restore the CPL 3 FS.base */
+	movq	%gs:UFS_BASE, %rax
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+
+	/* jump into G3 */
+	movq	$GD_UT, CS(%rdi)
+	movq	$GD_UD, SS(%rdi)
+	jmp	dune_pop_trap_frame
+
+.globl dune_ret_from_user
+dune_ret_from_user:
+	/* restore the G0 stack */
+	movq	%rdi, %rsi
+	movq	%gs:TRAP_STACK, %rdi
+
+	/* return code */
+	movq	%rsi, RAX(%rdi)
+
+	/* fill in remaining exception frame data */
+	lea	dune_ret_from_user_finish, %rax
+	movq	%rax, RIP(%rdi)
+	movq	$GD_KT, CS(%rdi)
+	movq	$GD_KD, SS(%rdi)
+	movq	%rdi, RSP(%rdi)
+
+	/* return to the caller */
+	jmp	dune_pop_trap_frame
+
+dune_ret_from_user_finish:
+	addq	$TF_END, %rsp
+	ret
+
+.globl __dune_intr
+.align 16
+__dune_intr:
+	i = 0
+	.rept 256
+	.align 16
+	.if i <> 8 && (i <= 9 || i >= 15) && i <> 17
+		pushq	%rax /* placeholder for no error code */
+	.endif
+	pushq	%rax /* save %rax */
+	mov $i, %rax
+	jmp __dune_intr_with_num
+	i = i + 1
+	.endr
+
+__dune_intr_with_num:
+	/* save the remaining destructable registers */
+	subq	$REG_END, %rsp
+	SAVE_REGS 1, 0 /* %rax already is pushed */
+	movq	%rax, %rdi
+
+	/* then restore the CPL0 FS base address */
+	mov	%cs, %rsi
+	test	$3, %rsi
+	jz	__dune_intr_handler
+	movq	%gs:KFS_BASE, %rax
+	movq	%gs:UFS_BASE, %rsi
+	cmp	%rax, %rsi
+	je	__dune_intr_handler
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+
+__dune_intr_handler:
+	/* setup arguments and call the handler */
+	movq	ERR(%rsp), %rsi
+	movq	%rsp, %rsi
+	call	dune_trap_handler
+
+	/* next restore the CPL3 FS base address */
+	mov	%cs, %rsi
+	test	$3, %rsi
+	jz	__dune_intr_done
+	movq	%gs:UFS_BASE, %rax
+	movq	%gs:KFS_BASE, %rsi
+	cmp	%rax, %rsi
+	je	__dune_intr_done
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+
+__dune_intr_done:
+	/* load only destructable registers */
+	RESTORE_REGS
+
+	/* jump to the frame */
+	addq	$EF_START, %rsp
+	iretq

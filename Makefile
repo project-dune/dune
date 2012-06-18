@@ -1,0 +1,18 @@
+LIBC	= eglibc-2.14/eglibc-build/libc.so
+SUBDIRS	= kern libdune bench sandbox
+
+all: $(SUBDIRS) $(LIBC)
+
+$(SUBDIRS):
+	$(MAKE) -C $(@)
+
+$(LIBC):
+	sh build-eglibc.sh
+
+clean:
+	for dir in $(SUBDIRS); do \
+		$(MAKE) -C $$dir $(@); \
+	done
+	rm -fr eglibc-2.14
+
+.PHONY: $(SUBDIRS) clean

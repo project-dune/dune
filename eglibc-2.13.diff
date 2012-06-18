@@ -1,0 +1,143 @@
+Index: sysdeps/unix/sysv/linux/x86_64/swapcontext.S
+===================================================================
+--- sysdeps/unix/sysv/linux/x86_64/swapcontext.S	(revision 17927)
++++ sysdeps/unix/sysv/linux/x86_64/swapcontext.S	(working copy)
+@@ -76,7 +76,16 @@
+ 	movl	$SIG_SETMASK, %edi
+ 	movl	$_NSIG8,%r10d
+ 	movl	$__NR_rt_sigprocmask, %eax
+-	syscall
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
++ 	syscall
++2:
+ 	cmpq	$-4095, %rax		/* Check %rax for error.  */
+ 	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
+ 
+Index: sysdeps/unix/sysv/linux/x86_64/getcontext.S
+===================================================================
+--- sysdeps/unix/sysv/linux/x86_64/getcontext.S	(revision 17927)
++++ sysdeps/unix/sysv/linux/x86_64/getcontext.S	(working copy)
+@@ -75,7 +75,16 @@
+ #endif
+ 	movl	$_NSIG8,%r10d
+ 	movl	$__NR_rt_sigprocmask, %eax
+-	syscall
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
++ 	syscall
++2:
+ 	cmpq	$-4095, %rax		/* Check %rax for error.  */
+ 	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
+ 
+Index: sysdeps/unix/sysv/linux/x86_64/sysdep.h
+===================================================================
+--- sysdeps/unix/sysv/linux/x86_64/sysdep.h	(revision 17927)
++++ sysdeps/unix/sysv/linux/x86_64/sysdep.h	(working copy)
+@@ -208,7 +208,16 @@
+ # define DO_CALL(syscall_name, args)		\
+     DOARGS_##args				\
+     movl $SYS_ify (syscall_name), %eax;		\
+-    syscall;
++    push %rax;                                  \
++    mov %cs, %rax;                              \
++    test $3, %rax;                              \
++    pop %rax;                                   \
++    jnz 1f;                                     \
++    vmcall;                                     \
++    jmp 2f;                                     \
++1:                                              \
++    syscall;                                    \
++2:
+ 
+ # define DOARGS_0 /* nothing */
+ # define DOARGS_1 /* nothing */
+@@ -241,7 +250,16 @@
+     LOAD_ARGS_##nr (args)						      \
+     LOAD_REGS_##nr							      \
+     asm volatile (							      \
++    "push %%rax\n\t"							      \
++    "mov %%cs, %%rax\n\t"						      \
++    "test $3, %%rax\n\t"						      \
++    "pop %%rax\n\t"							      \
++    "jz 1f\n\t"							      \
+     "syscall\n\t"							      \
++    "jmp 2f\n\t"							      \
++    "1:"								      \
++    "vmcall\n\t"							      \
++    "2:"								      \
+     : "=a" (resultvar)							      \
+     : "0" (name) ASM_ARGS_##nr : "memory", "cc", "r11", "cx");		      \
+     (long int) resultvar; })
+Index: sysdeps/unix/sysv/linux/x86_64/setcontext.S
+===================================================================
+--- sysdeps/unix/sysv/linux/x86_64/setcontext.S	(revision 17927)
++++ sysdeps/unix/sysv/linux/x86_64/setcontext.S	(working copy)
+@@ -44,7 +44,16 @@
+ 	movl	$SIG_SETMASK, %edi
+ 	movl	$_NSIG8,%r10d
+ 	movl	$__NR_rt_sigprocmask, %eax
+-	syscall
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
++ 	syscall
++2:
+ 	popq	%rdi			/* Reload %rdi, adjust stack.  */
+ 	cfi_adjust_cfa_offset(-8)
+ 	cmpq	$-4095, %rax		/* Check %rax for error.  */
+Index: sysdeps/unix/sysv/linux/x86_64/clone.S
+===================================================================
+--- sysdeps/unix/sysv/linux/x86_64/clone.S	(revision 17927)
++++ sysdeps/unix/sysv/linux/x86_64/clone.S	(working copy)
+@@ -79,7 +79,16 @@
+ 	/* End FDE now, because in the child the unwind info will be
+ 	   wrong.  */
+ 	cfi_endproc;
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
+ 	syscall
++2:
+ 
+ 	testq	%rax,%rax
+ 	jl	SYSCALL_ERROR_LABEL
+@@ -103,7 +112,16 @@
+ 	movl	$-1, %eax
+ 	jne	2f
+ 	movl	$SYS_ify(getpid), %eax
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 3f
++	vmcall
++	jmp 4f
++3:
+ 	syscall
++4:
+ 2:	movl	%eax, %fs:PID
+ 	movl	%eax, %fs:TID
+ 1:
