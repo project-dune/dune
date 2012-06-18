@@ -13,6 +13,8 @@ clean:
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir $(@); \
 	done
+
+distclean: clean
 	rm -fr eglibc-2.14
 
-.PHONY: $(SUBDIRS) clean
+.PHONY: $(SUBDIRS) clean distclean
