@@ -1,6 +1,6 @@
 #!/bin/sh
 
-function check_good()
+check_good()
 {
 	if [ $? -ne 0 ] ; then
 		echo nope
