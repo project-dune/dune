@@ -5,37 +5,65 @@ Dune is a system that lets you safely run applications in Ring 0 by using
 hardware virtualization.  This lets applications access privileged CPU features
 and do things like change their own page table, register interrupt handlers and
 more, while still being able to perform normal system calls.  More information
-here:
+is available here:
 
 	http://dune.scs.stanford.edu/
 
 Dune has three components:
 
 1.  A kernel module to enable virtualization (kern)
-2.  A library OS to help using Dune (libdune)
+2.  A library OS to help with using Dune (libdune)
 3.  A glibc patch for Dune enabled applications (eglibc-2.14).  This does not
     need to be installed globally.
 
 Dune is enabled only on applications that call dune_init().  All other
 applications on the system remain unaffected.
 
-Install
-=======
+This directory layout of this archive is as follows:
+kern/    -> the Dune kernel module
+libdune/ -> the Dune library OS
+bench/   -> a series of benchmarks to compare Dune and Linux performance
+test/    -> simple test programs and examples
+sandbox/ -> a generic implementation for sandboxing untrusted binaries
+
+Limitations
+===========
+
+This is an alpha-level release. The included code is fully usable but missing
+a couple important features. Most notably, it does not include support for signals
+or pthreads. We will make an update available soon to address these missing
+features.
+
+Setup
+=====
 
 # make
 # insmod kern/dune.ko
-# ./dune-env.sh test/hello
+# ./dune_env.sh test/hello
 
-The dune-env.sh script runs Dune applications with the Dune glibc (instead of
+The dune_env.sh script runs Dune applications with the Dune glibc (instead of
 the system's) through LD_PRELOAD.
 
-The first compile will take a long time because it needs to compile glibc.  Dune
-compilation is otherwise fast.
+The first compile could take some time because it needs to compile glibc, but
+compilation is otherwise very fast.
+
+Another interesting program to try is the Dune benchmark suite. It can be run
+as follows:
+
+# ./dune_env.sh bench/bench_dune
 
 Programming
 ===========
 
 1.  Call dune_init() to enter dune mode.  (Link to libdune.)
-2.  The application will continue to function as normal.  You can use glibc,
-    sockets, files, etc.  (LD_PRELOAD Dune's glibc.)
+2.  The application will continue to function as normal.  You can use printf,
+    sockets, files, etc.
 3.  But you can now perform privileged CPU instructions!
+
+* use dune_env.sh to ensure the proper glibc is loaded
+
+Questions?
+==========
+
+Contact us at dune@scs.stanford.edu.
+
