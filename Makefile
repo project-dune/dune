@@ -1,5 +1,5 @@
 LIBC	= eglibc-2.14/eglibc-build/libc.so
-SUBDIRS	= kern libdune bench sandbox
+SUBDIRS	= kern libdune bench test sandbox
 
 all: $(SUBDIRS) $(LIBC)
 
