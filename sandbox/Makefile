@@ -6,7 +6,7 @@ OBJ     = main.o umm.o trap.o
 
 all: sandbox
 
-sandbox: $(OBJ)
+sandbox: $(OBJ) ../libdune/libdune.a
 	$(CC) -o $(@) $(OBJ) $(LDFLAGS)
 
 clean:
