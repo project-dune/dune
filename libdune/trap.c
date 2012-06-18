@@ -2,12 +2,14 @@
  * trap.c - x86 fault handling
  */
 
+#include <errno.h>
+
 #include "dune.h"
 #include "cpu-x86.h"
 
-static dune_pgflt_cb pgflt_cb = NULL;
-static dune_syscall_cb syscall_cb = NULL;
-static dune_bkpt_cb bkpt_cb = NULL;
+static dune_syscall_cb syscall_cb;
+static dune_pgflt_cb pgflt_cb;
+static dune_intr_cb intr_cbs[IDT_ENTRIES];
 
 static inline unsigned long read_cr2(void)
 {
@@ -16,19 +18,23 @@ static inline unsigned long read_cr2(void)
 	return val;
 }
 
-void dune_register_pgflt_handler(dune_pgflt_cb cb)
+int dune_register_intr_handler(int vec, dune_intr_cb cb)
 {
-	pgflt_cb = cb;
-}
+	if (vec >= IDT_ENTRIES || vec < 0)
+		return -EINVAL;
 
-void dune_register_bkpt_handler(dune_bkpt_cb cb)
-{
-	bkpt_cb = cb;
+	intr_cbs[vec] = cb;
+	return 0;
 }
 
 void dune_register_syscall_handler(dune_syscall_cb cb)
 {
 	syscall_cb = cb;
+}
+
+void dune_register_pgflt_handler(dune_pgflt_cb cb)
+{
+	pgflt_cb = cb;
 }
 
 static bool addr_is_mapped(void *va)
@@ -99,6 +105,11 @@ void dune_syscall_handler(struct dune_tf *tf)
 
 void dune_trap_handler(int num, struct dune_tf *tf)
 {
+	if (intr_cbs[num]) {
+		intr_cbs[num](tf);
+		return;
+	}
+
 	switch (num) {
 	case T_PGFLT:
 		if (pgflt_cb) {
@@ -111,16 +122,6 @@ void dune_trap_handler(int num, struct dune_tf *tf)
 		}
 		break;
 
-	case T_BRKPT:
-		if (bkpt_cb) {
-			bkpt_cb(tf);
-		} else {
-			dune_printf("unhandled breakpoint\n");
-			dune_dump_trap_frame(tf);
-			dune_die();
-		}
-		break;
-		
 	case T_NMI:
 	case T_DBLFLT:
 	case T_GPFLT:
