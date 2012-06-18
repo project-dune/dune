@@ -22,3 +22,7 @@ check_good
 printf "Checking for kernel headers... "
 ls $MOD/source/include > /dev/null 2> /dev/null
 check_good
+
+printf "Checking for syscall table location... "
+kern/extract_symbol.sh sys_call_table > /dev/null 2> /dev/null
+check_good
