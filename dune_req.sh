@@ -20,7 +20,7 @@ uname -r | awk -F . '{print $1}' | grep 3 > /dev/null 2> /dev/null
 check_good
 
 printf "Checking for kernel headers... "
-ls $MOD/source/include > /dev/null 2> /dev/null
+ls $MOD/build/include > /dev/null 2> /dev/null
 check_good
 
 printf "Checking for syscall table location... "
