@@ -17,20 +17,14 @@ dune-objs := \
 # KSRC should be set to the path to your sources
 # modules are installed into KMISC
 KVER  := $(shell uname -r)
+EXTRACT := $(M)/extract_symbol.sh
 KSRC := /lib/modules/$(KVER)/build
 KMISC := /lib/modules/$(KVER)/kernel/drivers/misc
 KMISC_INC := /lib/modules/$(KVER)/include
-SYSTEM_MAP := /boot/System.map-$(KVER)
 
-# try the kernel build location if the distro does not ship with a System.map
-ifeq "$(wildcard $(SYSTEM_MAP) )" ""
-  SYSTEM_MAP := $(KSRC)/System.map
-endif
+SYSCALL_TBL = 0x$(shell $(EXTRACT) sys_call_table)
+DO_FORK = 0x$(shell $(EXTRACT) do_fork)
 
-SYSCALL_TBL = 0x$(shell cat $(SYSTEM_MAP) | \
-	      grep sys_call_table | head -n 1 | cut -d" " -f1)
-DO_FORK = 0x$(shell cat $(SYSTEM_MAP) | \
-              grep do_fork | head -n 1 | cut -d" " -f1)
 CFLAGS_vmx.o = -DSYSCALL_TBL=$(SYSCALL_TBL) -DDO_FORK=$(DO_FORK)
 
 # KSRC_OUTPUT should be overridden if you are using a 2.6 kernel that
@@ -68,6 +62,7 @@ TMP=$(PWD)/tmp
 MODVERDIR=$(TMP)/.tmp_versions
 
 modules:
+	echo $(EXTRACT)
 	mkdir -p $(MODVERDIR)
 #	-cp $(IEEE80211_MODVERDIR)/*.mod $(MODVERDIR)
 ifdef ($(KSRC_OUTPUT)/.tmp_versions)
