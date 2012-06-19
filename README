@@ -55,6 +55,9 @@ Setup
 The dune_env.sh script runs Dune applications with the Dune glibc (instead of
 the system's) through LD_PRELOAD.
 
+You'll need to be root to load the module. However, applications can use
+Dune without root, simply change the permission of '/dev/dune' accordingly.
+
 The first compile could take some time because it needs to compile glibc, but
 compilation is otherwise very fast.
 
