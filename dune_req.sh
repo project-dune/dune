@@ -11,7 +11,7 @@ check_good()
 	fi
 }
 
-printf "Cheking for x64... "
+printf "Checking for x86_64 Linux... "
 uname -m | grep x86_64 > /dev/null
 check_good
 
