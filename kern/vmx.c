@@ -1343,11 +1343,13 @@ int vmx_launch(struct dune_config *conf)
 			break;
 	}
 
-	vmx_destroy_vcpu(vcpu);
-	printk(KERN_ERR "vmx: destroyed VCPU (VPID %d)\n",
+	printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n",
 	       vcpu->vpid);
 
-	do_exit(vcpu->ret_code);
+	ret = vcpu->ret_code;
+	vmx_destroy_vcpu(vcpu);
+
+	do_exit(ret);
 	return 0;
 }
 
