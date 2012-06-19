@@ -6,7 +6,7 @@ SYM=$1
 
 extract()
 {
-	grep $SYM $SYSTEM_MAP | head -n 1 | cut -d" " -f1
+	cat $SYSTEM_MAP | egrep " $SYM\$" | cut -d" " -f1
 	exit 0
 }
 
@@ -26,7 +26,7 @@ check_file $SYSTEM_MAP
 VMLINUX=/lib/modules/$KVER/build/vmlinux
 ls $VMLINUX 2> /dev/null > /dev/null
 if [ $? -eq 0 ] ; then
-	nm $VMLINUX | grep $SYM | egrep " (R|T) " | cut -d" " -f1
+	nm $VMLINUX | egrep " $SYM\$" | egrep " (R|T) " | cut -d" " -f1
 	exit 0
 fi
 

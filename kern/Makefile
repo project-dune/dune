@@ -62,7 +62,6 @@ TMP=$(PWD)/tmp
 MODVERDIR=$(TMP)/.tmp_versions
 
 modules:
-	echo $(EXTRACT)
 	mkdir -p $(MODVERDIR)
 #	-cp $(IEEE80211_MODVERDIR)/*.mod $(MODVERDIR)
 ifdef ($(KSRC_OUTPUT)/.tmp_versions)
