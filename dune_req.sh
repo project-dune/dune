@@ -11,6 +11,10 @@ check_good()
 	fi
 }
 
+printf "Cheking for x64... "
+uname -m | grep x86_64 > /dev/null
+check_good
+
 printf "Checking for VT-x (w/ EPT and VPID)... "
 cat /proc/cpuinfo | grep flags | grep ept | grep vpid | grep vmx > /dev/null
 check_good
