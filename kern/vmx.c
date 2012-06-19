@@ -1198,10 +1198,14 @@ static void vmx_step_instruction(void)
 
 static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 {
-	unsigned long gva = vmcs_readl(GUEST_LINEAR_ADDRESS);
-	unsigned long gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
-	int exit_qual = vmcs_read32(EXIT_QUALIFICATION);
-	int ret;
+	unsigned long gva, gpa;
+	int exit_qual, ret;
+
+	vmx_get_cpu(vcpu);
+	gva = vmcs_readl(GUEST_LINEAR_ADDRESS);
+	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
+	exit_qual = vmcs_read32(EXIT_QUALIFICATION);
+	vmx_put_cpu(vcpu);
 
 	ret = vmx_do_ept_fault(vcpu, gpa, gva, exit_qual);
 
@@ -1319,13 +1323,11 @@ int vmx_launch(struct dune_config *conf)
 		if (ret == EXIT_REASON_VMCALL ||
 		    ret == EXIT_REASON_CPUID) {
 			vmx_step_instruction();
-		} else if (ret == EXIT_REASON_EPT_VIOLATION) {
-			if (vmx_handle_ept_violation(vcpu))
-				done = 1;
 		} else if (ret == EXIT_REASON_EXCEPTION_NMI) {
 			if (vmx_handle_nmi_exception(vcpu))
 				done = 1;
-		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT) {
+		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT &&
+			   ret != EXIT_REASON_EPT_VIOLATION) {
 			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
 			       ret, vmcs_read32(EXIT_QUALIFICATION));
 			vmx_dump_cpu(vcpu);
@@ -1338,6 +1340,8 @@ int vmx_launch(struct dune_config *conf)
 			vmx_handle_syscall(vcpu);
 		else if (ret == EXIT_REASON_CPUID)
 			vmx_handle_cpuid(vcpu);
+		else if (ret == EXIT_REASON_EPT_VIOLATION)
+			done = vmx_handle_ept_violation(vcpu);
 
 		if (done || vcpu->shutdown)
 			break;
