@@ -29,6 +29,7 @@ sandbox/ -> a generic implementation for sandboxing untrusted binaries
 Requirements
 ============
 
+* 64-bit x86 Linux environment w/ 64-bit kernel
 * A recent Intel CPU (probably Nehalem and later) with VT-x support.
 * A recent kernel version --- We use 3.0 and later, but earlier versions
   may also work.
@@ -36,14 +37,6 @@ Requirements
 
 We provide a script called dune_req.sh that will attempt to verify
 if these requirements are met.
-
-Limitations
-===========
-
-This is an alpha-level release. The included code is fully usable but missing
-a couple important features. Most notably, it does not include support for signals
-or pthreads. We will make an update available soon to address these missing
-features.
 
 Setup
 =====
@@ -65,6 +58,14 @@ Another interesting program to try is the Dune benchmark suite. It can be run
 as follows:
 
 # ./dune_env.sh bench/bench_dune
+
+Limitations
+===========
+
+This is an alpha-level release. The included code is fully usable but missing
+a couple important features. Most notably, it does not include support for signals
+or pthreads. We will make an update available soon to address these missing
+features.
 
 Programming
 ===========
