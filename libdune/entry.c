@@ -15,6 +15,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <err.h>
+#include <signal.h>
 
 #include "../kern/dune.h"
 #include "dune.h"
@@ -315,7 +316,7 @@ static int setup_layout(int fd, bool safe)
  */
 int dune_init_ex(bool map_all)
 {
-	int ret = 0, dune_fd;
+	int ret = 0, dune_fd, i;
 	struct dune_percpu *percpu;
 	struct dune_config conf;
 
@@ -365,6 +366,20 @@ int dune_init_ex(bool map_all)
 		goto err;
 	}
 #endif
+
+	for (i = 1; i < 32; i++) {
+		struct sigaction sa;
+
+		if (i == SIGSTOP || i == SIGKILL)
+			continue;
+
+		memset(&sa, 0, sizeof(sa));
+
+		sa.sa_handler = SIG_IGN;
+
+		if (sigaction(i, &sa, NULL) == -1)
+			err(1, "sigaction() %d", i);
+	}
 
 	ret = __dune_enter(dune_fd, &conf);
 	if (ret) {
