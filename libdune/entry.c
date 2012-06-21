@@ -32,6 +32,8 @@ extern void __dune_syscall(void);
 extern void __dune_syscall_end(void);
 extern void __dune_intr(void);
 
+extern char __dune_vsyscall_page;
+
 #define ISR_LEN 16
 
 #define __str_t(x...)	#x
@@ -225,6 +227,16 @@ static void setup_syscall(int dune_fd)
 	}
 }
 
+#define VSYSCALL_ADDR 0xffffffffff600000
+
+static void setup_vsyscall(void)
+{
+	ptent_t *pte;
+
+	dune_vm_lookup(pgroot, (void *) VSYSCALL_ADDR, 1, &pte);
+	*pte = PTE_ADDR(dune_va_to_pa(&__dune_vsyscall_page)) | PTE_P | PTE_U;
+}
+
 static void procmap_cb(const struct dune_procmap_entry *ent)
 {
 	int perm = PERM_NONE;
@@ -233,6 +245,11 @@ static void procmap_cb(const struct dune_procmap_entry *ent)
 	// page region already mapped
 	if (ent->begin == (unsigned long) PAGEBASE)
 		return;
+	
+	if (ent->begin == (unsigned long) VSYSCALL_ADDR) {
+		setup_vsyscall();
+		return;
+	}
 
 	if (ent->r)
 		perm |= PERM_R;
@@ -285,6 +302,8 @@ static int setup_layout_safe(struct dune_layout *layout)
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
+	
+	setup_vsyscall();
 
 	return 0;
 }
