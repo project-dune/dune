@@ -392,7 +392,7 @@ static void free_ept_page(epte_t epte)
 	struct page *page = pfn_to_page((epte & PTE_PFN_MASK) >> PAGE_SHIFT);
 
 	if (epte & __EPTE_WRITE)
-		set_page_dirty(page);
+		set_page_dirty_lock(page);
 	put_page(page);
 }
 
