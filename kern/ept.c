@@ -196,37 +196,41 @@ static epte_t convert_to_epte(pgprotval_t prot, uintptr_t addr, int leaf)
 	return val;
 }
 
-static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu, unsigned long addr)
+static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu,
+				struct mm_struct *mm,
+				unsigned long addr)
 {
 	uintptr_t mmap_start;
 
-	if (!current->mm) {
+	if (!mm) {
 		printk(KERN_ERR "ept: proc has no MM %d\n", current->pid);
 		return GPA_ADDR_INVAL;
 	}
+	
+	BUG_ON(!mm);
 
-	BUG_ON(!current->mm);
-
-	mmap_start = LG_ALIGN(current->mm->mmap_base) - GPA_SIZE;
+	mmap_start = LG_ALIGN(mm->mmap_base) - GPA_SIZE;
 
 	if ((addr & ~GPA_MASK) == 0)
 		return (addr & GPA_MASK) | GPA_ADDR_PROC;
-	else if (addr < LG_ALIGN(current->mm->mmap_base) && addr >= mmap_start)
+	else if (addr < LG_ALIGN(mm->mmap_base) && addr >= mmap_start)
 		return (addr - mmap_start) | GPA_ADDR_MAP;
-	else if ((addr & ~GPA_MASK) == (current->mm->start_stack & ~GPA_MASK))
+	else if ((addr & ~GPA_MASK) == (mm->start_stack & ~GPA_MASK))
 		return (addr & GPA_MASK) | GPA_ADDR_STACK;
 	else
 		return GPA_ADDR_INVAL;
 }
 
-static unsigned long gpa_to_hva(struct vmx_vcpu *vcpu, unsigned long addr)
+static unsigned long gpa_to_hva(struct vmx_vcpu *vcpu,
+				struct mm_struct *mm,
+				unsigned long addr)
 {
 	if ((addr & ~GPA_MASK) == GPA_ADDR_PROC)
 		return (addr & GPA_MASK);
 	else if ((addr & ~GPA_MASK) == GPA_ADDR_MAP)
-		return (addr & GPA_MASK) + LG_ALIGN(current->mm->mmap_base) - GPA_SIZE;
+		return (addr & GPA_MASK) + LG_ALIGN(mm->mmap_base) - GPA_SIZE;
 	else if ((addr & ~GPA_MASK) == GPA_ADDR_STACK)
-		return (addr & GPA_MASK) | (current->mm->start_stack & ~GPA_MASK);
+		return (addr & GPA_MASK) | (mm->start_stack & ~GPA_MASK);
 	else
 		return GPA_ADDR_INVAL;
 }
@@ -274,15 +278,15 @@ ept_lookup_gpa(struct vmx_vcpu *vcpu, void *gpa, int level,
 }
 
 static int
-ept_lookup(struct vmx_vcpu *vcpu, void *hva, int level,
-	   int create, epte_t **epte_out)
+ept_lookup(struct vmx_vcpu *vcpu, struct mm_struct *mm,
+	   void *hva, int level, int create, epte_t **epte_out)
 {
-	void *gpa = (void *) hva_to_gpa(vcpu, (unsigned long) hva);
+	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) hva);
 
 	if (gpa == (void *) GPA_ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %p is out of range\n", hva);
 		printk(KERN_ERR "ept: mem_base %lx, stack_start %lx\n",
-		       current->mm->mmap_base, current->mm->start_stack);
+		       mm->mmap_base, mm->start_stack);
 		return -EINVAL;
 	}
 
@@ -305,7 +309,7 @@ __vmx_clone_entry(struct vmx_vcpu *vcpu, pgprotval_t prot, unsigned long va)
 		return -EFAULT;
 	}
 
-	ret = ept_lookup(vcpu, (void *) va,
+	ret = ept_lookup(vcpu, current->mm, (void *) va,
 			 (prot & _PAGE_PSE) ? 1 : 0, 1, &epte);
 	if (ret) {
 		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
@@ -492,7 +496,7 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 		     unsigned long gva, int fault_flags)
 {
 	int ret;
-	unsigned long hva = gpa_to_hva(vcpu, gpa);
+	unsigned long hva = gpa_to_hva(vcpu, current->mm, gpa);
 	int make_write = (fault_flags & VMX_EPT_FAULT_WRITE) ? 1 : 0;
 
 	pr_debug("ept: GPA: 0x%lx, GVA: 0x%lx, HVA: 0x%lx, flags: %x\n",
@@ -507,11 +511,13 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 }
 
 /* returns 1 if page table changed, 0 otherwise */
-static int ept_invalidate_page(struct vmx_vcpu *vcpu, unsigned long addr)
+static int ept_invalidate_page(struct vmx_vcpu *vcpu,
+			       struct mm_struct *mm,
+			       unsigned long addr)
 {
 	int ret;
 	epte_t *epte;
-	void *gpa = (void *) hva_to_gpa(vcpu, (unsigned long) addr);
+	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
 	if (gpa == (void *) GPA_ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
@@ -542,7 +548,7 @@ static void ept_mmu_notifier_invalidate_page(struct mmu_notifier *mn,
 
 	pr_debug("ept: invalidate_page addr %lx\n", address);
 
-	ept_invalidate_page(vcpu, address);
+	ept_invalidate_page(vcpu, mm, address);
 }
 
 static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
@@ -558,7 +564,7 @@ static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	pr_debug("ept: invalidate_range_start start %lx end %lx\n", start, end);
 
 	while (pos < end) {
-		ret = ept_lookup(vcpu, (void *) pos, 0, 0, &epte);
+		ret = ept_lookup(vcpu, mm, (void *) pos, 0, 0, &epte);
 		if (!ret) {
 			pos += epte_big(*epte) ? HUGE_PAGE_SIZE : PAGE_SIZE;
 			ept_clear_epte(epte);
@@ -583,10 +589,10 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 {
 	int ret;
 	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
-	unsigned long gpa = hva_to_gpa(vcpu, (unsigned long) address);
+	unsigned long gpa = hva_to_gpa(vcpu, mm, (unsigned long) address);
 	int make_write = (pte_flags(pte) & _PAGE_RW) ? 1 : 0;
 
-//	printk(KERN_INFO "ept: change_pte addr %lx\n", address);
+	pr_debug("ept: change_pte addr %lx\n", address);
 
 	if (gpa == GPA_ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", address);
@@ -608,7 +614,7 @@ static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 
 	printk(KERN_INFO "ept: clear_flush_young addr %lx\n", address);
 
-	return ept_invalidate_page(vcpu, address);
+	return ept_invalidate_page(vcpu, mm, address);
 }
 
 static int ept_mmu_notifier_test_young(struct mmu_notifier *mn,
@@ -652,7 +658,6 @@ int vmx_create_ept(struct vmx_vcpu *vcpu)
 		goto fail;
 	}
 	up_read(&current->mm->mmap_sem);
-
 
 	vcpu->mmu_notifier.ops = &ept_mmu_notifier_ops;
 	ret = mmu_notifier_register(&vcpu->mmu_notifier, current->mm);
