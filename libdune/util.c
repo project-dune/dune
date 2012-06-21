@@ -91,7 +91,7 @@ void dune_passthrough_syscall(struct dune_tf *tf)
 		     "movq %%rax, %0 \n\t" :
 		     "=a" (tf->rax) :
 		     "a" (tf->rax), "r" (tf->rdi), "r" (tf->rsi),
-		     "r" (tf->rdx), "r" (tf->r10), "r" (tf->r8),
+		     "r" (tf->rdx), "r" (tf->rcx), "r" (tf->r8),
 		     "r" (tf->r9) : "rdi", "rsi", "rdx", "r10",
 		     "r8", "r9", "memory");     
 }
