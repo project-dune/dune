@@ -1042,6 +1042,18 @@ static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
 	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid);
 }
 
+static long dune_sys_fork(void)
+{
+	struct vmx_vcpu *vcpu;
+	struct pt_regs regs;
+
+	asm("movq %%r11, %0" : "=r"(vcpu));
+
+	make_pt_regs(vcpu, &regs);
+
+	return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL);
+}
+
 static void vmx_init_syscall(void)
 {
 	memcpy(dune_syscall_tbl, (void *) SYSCALL_TBL,
@@ -1050,6 +1062,7 @@ static void vmx_init_syscall(void)
 	dune_syscall_tbl[__NR_exit] = (void *) &dune_exit;
 	dune_syscall_tbl[__NR_exit_group] = (void *) &dune_exit_group;
 	dune_syscall_tbl[__NR_clone] = (void *) &dune_sys_clone;
+	dune_syscall_tbl[__NR_fork] = (void *) &dune_sys_fork;
 }
 
 #ifdef CONFIG_X86_64
