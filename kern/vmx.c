@@ -995,9 +995,10 @@ static int dune_exit_group(int error_code)
 	return 0;
 }
 
-static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs)
+static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
+			 int sysnr)
 {
-	regs->ax = __NR_clone;
+	regs->ax = sysnr;
 	regs->orig_ax = vcpu->regs[VCPU_REGS_RAX];
 	regs->bx = vcpu->regs[VCPU_REGS_RBX];
 	regs->cx = vcpu->regs[VCPU_REGS_RCX];
@@ -1014,9 +1015,12 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs)
 	regs->r15 = vcpu->regs[VCPU_REGS_R15];
 	regs->bp = vcpu->regs[VCPU_REGS_RBP];
 
+	vmx_get_cpu(vcpu);
 	regs->ip = vmcs_readl(GUEST_RIP);
 	regs->sp = vmcs_readl(GUEST_RSP);
 	regs->flags = vmcs_readl(GUEST_RFLAGS);
+	vmx_put_cpu(vcpu);
+
 	regs->cs = __USER_CS;
 	regs->ss = __USER_DS;
 }
@@ -1034,8 +1038,7 @@ static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
 
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
-	make_pt_regs(vcpu, &regs);
-
+	make_pt_regs(vcpu, &regs, __NR_clone);
 	if (!newsp)
 		newsp = regs.sp;
 
@@ -1046,12 +1049,25 @@ static long dune_sys_fork(void)
 {
 	struct vmx_vcpu *vcpu;
 	struct pt_regs regs;
-
+	
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
-	make_pt_regs(vcpu, &regs);
+	make_pt_regs(vcpu, &regs, __NR_fork);
 
 	return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL);
+}
+
+static long dune_sys_vfork(void)
+{
+	struct vmx_vcpu *vcpu;
+	struct pt_regs regs;
+	
+	asm("movq %%r11, %0" : "=r"(vcpu));
+
+	make_pt_regs(vcpu, &regs, __NR_vfork);
+
+	return dune_do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp,
+			    &regs, 0, NULL, NULL);
 }
 
 static void vmx_init_syscall(void)
@@ -1063,6 +1079,7 @@ static void vmx_init_syscall(void)
 	dune_syscall_tbl[__NR_exit_group] = (void *) &dune_exit_group;
 	dune_syscall_tbl[__NR_clone] = (void *) &dune_sys_clone;
 	dune_syscall_tbl[__NR_fork] = (void *) &dune_sys_fork;
+	dune_syscall_tbl[__NR_vfork] = (void *) &dune_sys_vfork;
 }
 
 #ifdef CONFIG_X86_64
