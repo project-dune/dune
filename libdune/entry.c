@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <err.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include "../kern/dune.h"
 #include "dune.h"
@@ -326,6 +327,12 @@ static int setup_layout(int fd, bool safe)
 	return ret;
 }
 
+static void init_after_fork(void)
+{
+	if (dune_init())
+		err(1, "dune_init()");
+}
+
 /**
  * dune_init_ex - Enables DUNE mode for the currently running process
  * 
@@ -389,8 +396,12 @@ int dune_init_ex(bool map_all)
 	for (i = 1; i < 32; i++) {
 		struct sigaction sa;
 
-		if (i == SIGSTOP || i == SIGKILL)
+		switch (i) {
+		case SIGSTOP:
+		case SIGKILL:
+		case SIGCHLD:
 			continue;
+		}
 
 		memset(&sa, 0, sizeof(sa));
 
@@ -399,6 +410,9 @@ int dune_init_ex(bool map_all)
 		if (sigaction(i, &sa, NULL) == -1)
 			err(1, "sigaction() %d", i);
 	}
+
+	if (pthread_atfork(NULL, NULL, init_after_fork))
+		err(1, "pthread_atfork()");
 
 	ret = __dune_enter(dune_fd, &conf);
 	if (ret) {

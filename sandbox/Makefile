@@ -1,7 +1,7 @@
 CC      = gcc
 LD	= ld
 CFLAGS  = -Wall -O2 -MD -I ../
-LDFLAGS = -O2 -L ../libdune -ldune -T sandbox.ld
+LDFLAGS = -O2 -L ../libdune -ldune -lpthread -T sandbox.ld
 OBJ     = main.o umm.o trap.o
 
 all: sandbox

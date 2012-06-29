@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <err.h>
+#include <string.h>
 
 #include "libdune/dune.h"
 
@@ -24,27 +25,17 @@ static int test_fork(void)
 
 	if (check_dune())
 		return 2;
-/*
+
 	pid = fork();
 	if (pid == -1)
 		return 3;
-*/
-
-	asm ("mov $57, %%rax\n"
-	     "vmcall\n" 
-	     :  "=A" (pid)
-	     :
-	     : 
-	     );
 
 	/* child */
 	if (pid == 0) {
-//		if (check_dune())
-//			exit(1);
+		if (check_dune())
+			exit(1);
 
-		sleep(5);
-
-		exit(0);
+		exit(69);
 	} else {
 		if (check_dune())
 			return 4;
@@ -52,7 +43,7 @@ static int test_fork(void)
 		if (waitpid(pid, &rc, 0) == -1)
 			err(5, "waitpid()");
 
-		if (WEXITSTATUS(rc))
+		if (WEXITSTATUS(rc) != 69)
 			return 6;
 	}
 
