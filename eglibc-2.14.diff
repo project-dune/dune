@@ -1,0 +1,168 @@
+diff -rup eglibc-2.14.orig/libc/nptl/sysdeps/unix/sysv/linux/x86_64/lowlevellock.h eglibc-2.14/libc/nptl/sysdeps/unix/sysv/linux/x86_64/lowlevellock.h
+--- eglibc-2.14.orig/libc/nptl/sysdeps/unix/sysv/linux/x86_64/lowlevellock.h	2012-06-29 15:42:49.000000000 -0700
++++ eglibc-2.14/libc/nptl/sysdeps/unix/sysv/linux/x86_64/lowlevellock.h	2012-06-29 15:25:53.000000000 -0700
+@@ -557,6 +557,17 @@ LLL_STUB_UNWIND_INFO_END
+ #define lll_islocked(futex) \
+   (futex != LLL_LOCK_INITIALIZER)
+ 
++#define DUNE_SYSCALL \
++        "push %%rax\n\t"                                                      \
++        "mov %%cs, %%rax\n\t"                                                 \
++        "test $3, %%rax\n\t"                                                  \
++        "pop %%rax\n\t"                                                       \
++        "jz 69f\n\t"                                                          \
++        "syscall\n\t"                                                         \
++        "jmp 70f\n\t"                                                         \
++        "69:"                                                                 \
++        "vmcall\n\t"                                                          \
++        "70:"
+ 
+ /* The kernel notifies a process with uses CLONE_CLEARTID via futex
+    wakeup when the clone terminates.  The memory location contains the
+@@ -571,7 +582,7 @@ LLL_STUB_UNWIND_INFO_END
+     if (_tid != 0)							      \
+       __asm __volatile ("xorq %%r10, %%r10\n\t"				      \
+ 			"1:\tmovq %2, %%rax\n\t"			      \
+-			"syscall\n\t"					      \
++			DUNE_SYSCALL					      \
+ 			"cmpl $0, (%%rdi)\n\t"				      \
+ 			"jne 1b"					      \
+ 			: "=&a" (__ignore)				      \
+diff -rup eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/clone.S eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/clone.S
+--- eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/clone.S	2012-06-29 15:42:39.000000000 -0700
++++ eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/clone.S	2012-06-18 14:49:49.000000000 -0700
+@@ -79,7 +79,16 @@ ENTRY (BP_SYM (__clone))
+ 	/* End FDE now, because in the child the unwind info will be
+ 	   wrong.  */
+ 	cfi_endproc;
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
+ 	syscall
++2:
+ 
+ 	testq	%rax,%rax
+ 	jl	SYSCALL_ERROR_LABEL
+@@ -103,7 +112,16 @@ L(thread_start):
+ 	movl	$-1, %eax
+ 	jne	2f
+ 	movl	$SYS_ify(getpid), %eax
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 3f
++	vmcall
++	jmp 4f
++3:
+ 	syscall
++4:
+ 2:	movl	%eax, %fs:PID
+ 	movl	%eax, %fs:TID
+ 1:
+diff -rup eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/getcontext.S eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/getcontext.S
+--- eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/getcontext.S	2012-06-29 15:42:39.000000000 -0700
++++ eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/getcontext.S	2012-06-18 14:49:49.000000000 -0700
+@@ -76,7 +76,16 @@ ENTRY(__getcontext)
+ #endif
+ 	movl	$_NSIG8,%r10d
+ 	movl	$__NR_rt_sigprocmask, %eax
+-	syscall
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
++ 	syscall
++2:
+ 	cmpq	$-4095, %rax		/* Check %rax for error.  */
+ 	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
+ 
+diff -rup eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/setcontext.S eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/setcontext.S
+--- eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/setcontext.S	2012-06-29 15:42:39.000000000 -0700
++++ eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/setcontext.S	2012-06-18 14:49:49.000000000 -0700
+@@ -44,7 +44,16 @@ ENTRY(__setcontext)
+ 	movl	$SIG_SETMASK, %edi
+ 	movl	$_NSIG8,%r10d
+ 	movl	$__NR_rt_sigprocmask, %eax
+-	syscall
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
++ 	syscall
++2:
+ 	popq	%rdi			/* Reload %rdi, adjust stack.  */
+ 	cfi_adjust_cfa_offset(-8)
+ 	cmpq	$-4095, %rax		/* Check %rax for error.  */
+diff -rup eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/swapcontext.S eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/swapcontext.S
+--- eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/swapcontext.S	2012-06-29 15:42:39.000000000 -0700
++++ eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/swapcontext.S	2012-06-18 14:49:49.000000000 -0700
+@@ -76,7 +76,16 @@ ENTRY(__swapcontext)
+ 	movl	$SIG_SETMASK, %edi
+ 	movl	$_NSIG8,%r10d
+ 	movl	$__NR_rt_sigprocmask, %eax
+-	syscall
++	push %rax
++	mov %cs, %rax
++	test $3, %rax
++	pop %rax
++	jnz 1f
++	vmcall
++	jmp 2f
++1:
++ 	syscall
++2:
+ 	cmpq	$-4095, %rax		/* Check %rax for error.  */
+ 	jae	SYSCALL_ERROR_LABEL	/* Jump to error handler if error.  */
+ 
+diff -rup eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/sysdep.h eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/sysdep.h
+--- eglibc-2.14.orig/libc/sysdeps/unix/sysv/linux/x86_64/sysdep.h	2012-06-29 15:42:39.000000000 -0700
++++ eglibc-2.14/libc/sysdeps/unix/sysv/linux/x86_64/sysdep.h	2012-06-18 14:49:49.000000000 -0700
+@@ -208,7 +208,16 @@
+ # define DO_CALL(syscall_name, args)		\
+     DOARGS_##args				\
+     movl $SYS_ify (syscall_name), %eax;		\
+-    syscall;
++    push %rax;                                  \
++    mov %cs, %rax;                              \
++    test $3, %rax;                              \
++    pop %rax;                                   \
++    jnz 1f;                                     \
++    vmcall;                                     \
++    jmp 2f;                                     \
++1:                                              \
++    syscall;                                    \
++2:
+ 
+ # define DOARGS_0 /* nothing */
+ # define DOARGS_1 /* nothing */
+@@ -241,7 +250,16 @@
+     LOAD_ARGS_##nr (args)						      \
+     LOAD_REGS_##nr							      \
+     asm volatile (							      \
++    "push %%rax\n\t"							      \
++    "mov %%cs, %%rax\n\t"						      \
++    "test $3, %%rax\n\t"						      \
++    "pop %%rax\n\t"							      \
++    "jz 1f\n\t"							      \
+     "syscall\n\t"							      \
++    "jmp 2f\n\t"							      \
++    "1:"								      \
++    "vmcall\n\t"							      \
++    "2:"								      \
+     : "=a" (resultvar)							      \
+     : "0" (name) ASM_ARGS_##nr : "memory", "cc", "r11", "cx");		      \
+     (long int) resultvar; })

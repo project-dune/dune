@@ -2,9 +2,9 @@
 
 ROOT=`readlink -f $0`
 ROOT=`dirname $ROOT`
-LIBC=$ROOT/eglibc-2.14/eglibc-build/libc.so
+LIBCBUILD=$ROOT/eglibc-2.14/eglibc-build
 CMD=`readlink -f $1`
 
 shift 1
 
-LD_PRELOAD=$LIBC $CMD $*
+LD_PRELOAD=$LIBCBUILD/libc.so:$LIBCBUILD/nptl/libpthread.so $CMD $*

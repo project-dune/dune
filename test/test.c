@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <err.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "libdune/dune.h"
 
@@ -50,11 +51,49 @@ static int test_fork(void)
 	return 0;
 }
 
+static void *test_pthread_thread(void *arg)
+{
+	if (check_dune())
+		return NULL;
+
+	return (void*) 0x666;
+}
+
+static int test_pthread(void)
+{
+	pthread_t pt;
+	void *ret;
+
+	if (dune_init())
+		return 1;
+
+	if (check_dune())
+		return 2;
+
+	if (pthread_create(&pt, NULL, test_pthread_thread, NULL))
+		err(1, "pthread_create()");
+
+	if (check_dune())
+		return 3;
+
+	if (pthread_join(pt, &ret))
+		return 4;
+
+	if (ret != (void*) 0x666)
+		return 5;
+
+	if (check_dune())
+		return 6;
+
+	return 0;
+}
+
 static struct test {
 	char	*name;
 	int	(*cb)(void);
 } _tests[] = {
 	{ "fork", test_fork },
+	{ "pthread", test_pthread },
 };
 
 static void run_test(struct test *t)
