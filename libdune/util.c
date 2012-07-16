@@ -5,8 +5,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <signal.h>
 
 #include "dune.h"
+#include "../kern/dune.h"
 
 static int dune_puts(const char *buf)
 {
@@ -94,4 +96,16 @@ void dune_passthrough_syscall(struct dune_tf *tf)
 		     "r" (tf->rdx), "r" (tf->rcx), "r" (tf->r8),
 		     "r" (tf->r9) : "rdi", "rsi", "rdx", "r10",
 		     "r8", "r9", "memory");     
+}
+
+sighandler_t dune_signal(int sig, sighandler_t cb)
+{
+	dune_intr_cb x = (dune_intr_cb) cb; /* XXX */
+
+	if (signal(sig, cb) == SIG_ERR)
+		return SIG_ERR;
+
+	dune_register_intr_handler(DUNE_SIGNAL_INTR_BASE + sig, x);
+
+	return NULL;
 }

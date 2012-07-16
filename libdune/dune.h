@@ -8,6 +8,8 @@
 #include "mmu.h"
 #include "elf.h"
 
+typedef void (*sighandler_t)(int);
+
 // utilities
 
 static inline unsigned long dune_get_ticks(void)
@@ -21,6 +23,7 @@ extern int dune_printf(const char *fmt, ...);
 extern void dune_die(void);
 extern void * dune_mmap(void *addr, size_t length, int prot,
 		       int flags, int fd, off_t offset);
+extern sighandler_t dune_signal(int sig, sighandler_t cb);
 extern unsigned long dune_get_user_fs(void);
 extern void dune_set_user_fs(unsigned long fs_base);
 

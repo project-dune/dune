@@ -1339,11 +1339,31 @@ int vmx_launch(struct dune_config *conf)
 		}
 
 		if (signal_pending(current)) {
+			int signr;
+			siginfo_t info;
+			uint32_t x;
+
 			local_irq_enable();
 			vmx_put_cpu(vcpu);
-			printk(KERN_ERR "vmx: signals not supported, dying\n");
-			vcpu->ret_code = ((ENOSYS) << 8);
-			break;
+
+			spin_lock_irq(&current->sighand->siglock);
+			signr = dequeue_signal(current, &current->blocked,
+					       &info);
+			spin_unlock_irq(&current->sighand->siglock);
+			if (!signr)
+				continue;
+
+			if (signr == SIGKILL) {
+				printk(KERN_INFO "vmx: got sigkill, dying");
+				vcpu->ret_code = ((ENOSYS) << 8);
+				break;
+			}
+
+			x  = DUNE_SIGNAL_INTR_BASE + signr;
+			x |= INTR_INFO_VALID_MASK;
+
+			vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, x);
+			continue;
 		}
 
 		ret = vmx_run_vcpu(vcpu);

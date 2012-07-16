@@ -88,12 +88,43 @@ static int test_pthread(void)
 	return 0;
 }
 
+static int test_signal_glob;
+
+static void test_signal_handler(int num)
+{
+	test_signal_glob = 666;
+}
+
+static int test_signal(void)
+{
+	int pid;
+
+	if (dune_init())
+		return 1;
+
+	pid = 0;
+
+	pid = getpid();
+
+	if (dune_signal(SIGUSR1, test_signal_handler) == SIG_ERR)
+		err(1, "signal()");
+
+	if (kill(pid, SIGUSR1) == -1)
+		err(1, "kill()");
+
+	if (test_signal_glob != 666)
+		return 2;
+
+	return 0;
+}
+
 static struct test {
 	char	*name;
 	int	(*cb)(void);
 } _tests[] = {
 	{ "fork", test_fork },
 	{ "pthread", test_pthread },
+	{ "signal", test_signal },
 };
 
 static void run_test(struct test *t)

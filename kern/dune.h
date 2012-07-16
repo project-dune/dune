@@ -15,6 +15,8 @@
 #define DUNE_GET_SYSCALL	 _IO(DUNE_MINOR, 0x02)
 #define DUNE_GET_LAYOUT	_IOW(DUNE_MINOR, 0x03, struct dune_layout)
 
+#define DUNE_SIGNAL_INTR_BASE 200
+
 struct dune_config {
 	__u64 rip;
 	__u64 rsp;
