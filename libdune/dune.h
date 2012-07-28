@@ -27,12 +27,14 @@ extern sighandler_t dune_signal(int sig, sighandler_t cb);
 extern unsigned long dune_get_user_fs(void);
 extern void dune_set_user_fs(unsigned long fs_base);
 
+#ifndef assert
 #define assert(expr) \
 if (!(expr)) { \
 	dune_printf("ASSERT(" #expr ") at %s:%d in function %s\n", \
 			   __FILE__, __LINE__, __func__); \
 	dune_die(); \
 }
+#endif /* assert */
 
 // fault handling
 
