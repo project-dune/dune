@@ -21,17 +21,18 @@ enum {
 	ST_DEAD,
 };
 
-static struct sthread {
+struct sthread {
 	int		st_id;
 	int		st_state;
 	void		*st_ret;
 	void		*st_stack;
 	ptent_t		*st_pgroot;
+	struct dune_tf	st_tf;
 	sc_t		st_sc;
 	unsigned char	*st_writable;
 	int		st_walk;
 	struct sthread	*st_next;
-} _sthreads;
+};
 
 static int _sthread_id;
 
@@ -59,6 +60,7 @@ static int _tag_id;
 
 static struct kstate {
 	struct sthread	*ks_current;
+	struct sthread	ks_sthreads;
 } *_kstate;
 
 static void *xmalloc(size_t sz)
@@ -85,6 +87,66 @@ static void *kmalloc(int sz)
 		errx(1, "kmalloc()");
 
 	return x;
+}
+
+static int walk_recycle(const void *arg, ptent_t *ptep, void *va)
+{
+	struct sthread *s = (void*) arg;
+	unsigned char *pa = &s->st_writable[s->st_walk];
+	unsigned char *orig = &_checkpointed_mem[s->st_walk];
+
+	s->st_walk += 4096;
+
+	if (!(*ptep & PTE_D))
+		return 0;
+
+//	printf("Dirty %p\n", va);
+
+	memcpy(pa, orig, 4096);
+
+	*ptep = *ptep & ~PTE_D;
+
+	return 0;
+}
+
+static int walk_recycle_stack(const void *arg, ptent_t *ptep, void *va)
+{
+	struct sthread *s = (void*) arg;
+	unsigned char *pa = (unsigned char*) s->st_stack + s->st_walk;
+
+	s->st_walk += 4096;
+
+	if (!(*ptep & PTE_D))
+		return 0;
+
+//	printf("Dirty stack %p\n", va);
+
+	memset(pa, 0, 4096);
+//	*ptep = *ptep & ~PTE_D;
+
+	return 0;
+}
+
+static void recycle(struct sthread *s)
+{
+	struct segment *seg = _segments.s_next;
+
+	s->st_walk = 0;
+
+	while (seg) {
+		if (seg->s_flags & PROT_WRITE) {
+			dune_vm_page_walk(s->st_pgroot, (void*) seg->s_start,
+					  (void*) seg->s_end - 4096,
+					  walk_recycle, s);
+		}
+
+		seg = seg->s_next;
+	}
+
+	s->st_walk = 0;
+	dune_vm_page_walk(s->st_pgroot, (void*) s->st_stack, 
+			  (void*) (s->st_stack + STACK_SIZE - 4096),
+			  walk_recycle_stack, s);
 }
 
 static int has_fd_perm(struct sthread *s, int fd, int perm)
@@ -128,12 +190,53 @@ static int can_do_sys(struct sthread *st, int sysno)
 	return sc->sc_sys[pos] & (1 << (sysno % 8));
 }
 
+static void schedule(struct dune_tf *tf)
+{
+	struct sthread *s = _kstate->ks_sthreads.st_next;
+
+#if 0
+	dune_printf("resched %d [tf %p]\n",
+		    _kstate->ks_current ? _kstate->ks_current->st_id : -1, tf);
+#endif
+
+	while (s) {
+		if (s != _kstate->ks_current 
+		    && s->st_state == ST_RUNNING)
+			break;
+
+		s = s->st_next;
+	}
+
+	if (s) {
+//		dune_printf("Scheduling %d\n", s->st_id);
+
+		_kstate->ks_current = s;
+		load_cr3((unsigned long) s->st_pgroot | CR3_NOFLUSH | s->st_id);
+		dune_passthrough_syscall(&s->st_tf);
+		dune_jump_to_user(&s->st_tf); /* XXX need to restore EBP */
+		load_cr3((unsigned long) pgroot | CR3_NOFLUSH | 0);
+		_kstate->ks_current = NULL;
+		return;
+	}
+
+	/* try master */
+	if (!s && tf) {
+//		dune_printf("Scheduling master\n");
+                dune_ret_from_user(-1);
+		return;
+	}
+
+	dune_printf("damn... gotta schedule the same dude\n");
+	abort();
+}
+
 static void syscall_handler(struct dune_tf *tf)
 {
         int syscall_num = (int) tf->rax;
 	struct sthread *current = _kstate->ks_current;
 	int fd = -1, perm = -1;
 	int rc;
+	int need_resched = 0;
 
 //	dune_printf("SYSCALL %d current %p\n", syscall_num, _kstate->ks_current);
 
@@ -167,8 +270,15 @@ static void syscall_handler(struct dune_tf *tf)
 	/* special treatment */
 	switch (syscall_num) {
 	case 666:
+        	current->st_ret = (void*) ARG0(tf);
+		recycle(current);
+		current->st_state = ST_ZOMBIE;
                 dune_ret_from_user((int) ARG0(tf));
 		return;
+
+	case SYS_read:
+		need_resched = 1;
+		break;
 
         case SYS_open:
                 rc = open((char*) ARG0(tf), ARG1(tf), ARG2(tf), ARG3(tf));
@@ -176,6 +286,12 @@ static void syscall_handler(struct dune_tf *tf)
                         sc_fd_add(&current->st_sc, rc, PROT_READ | PROT_WRITE);
 
                 tf->rax = rc;
+		return;
+	}
+
+	if (need_resched) {
+		memcpy(&current->st_tf, tf, sizeof(current->st_tf));
+		schedule(tf);
 		return;
 	}
 
@@ -311,70 +427,9 @@ static void sthread_trampoline(stcb_t cb, void *arg)
         syscall(666, ret);
 }
 
-static int walk_recycle(const void *arg, ptent_t *ptep, void *va)
-{
-	struct sthread *s = (void*) arg;
-	unsigned char *pa = &s->st_writable[s->st_walk];
-	unsigned char *orig = &_checkpointed_mem[s->st_walk];
-
-	s->st_walk += 4096;
-
-	if (!(*ptep & PTE_D))
-		return 0;
-
-//	printf("Dirty %p\n", va);
-
-	memcpy(pa, orig, 4096);
-
-	*ptep = *ptep & ~PTE_D;
-
-	return 0;
-}
-
-static int walk_recycle_stack(const void *arg, ptent_t *ptep, void *va)
-{
-	struct sthread *s = (void*) arg;
-	unsigned char *pa = (unsigned char*) s->st_stack + s->st_walk;
-
-	s->st_walk += 4096;
-
-	if (!(*ptep & PTE_D))
-		return 0;
-
-//	printf("Dirty stack %p\n", va);
-
-	memset(pa, 0, 4096);
-//	*ptep = *ptep & ~PTE_D;
-
-	return 0;
-}
-
-static void recycle(struct sthread *s)
-{
-	struct segment *seg = _segments.s_next;
-
-	s->st_walk = 0;
-
-	while (seg) {
-		if (seg->s_flags & PROT_WRITE) {
-			dune_vm_page_walk(s->st_pgroot, (void*) seg->s_start,
-					  (void*) seg->s_end - 4096,
-					  walk_recycle, s);
-		}
-
-		seg = seg->s_next;
-	}
-
-	s->st_walk = 0;
-	dune_vm_page_walk(s->st_pgroot, (void*) s->st_stack, 
-			  (void*) (s->st_stack + STACK_SIZE - 4096),
-			  walk_recycle_stack, s);
-}
-
 static int launch_sthread(struct sthread *s, stcb_t cb, void *arg)
 {
 	struct dune_tf tf;
-	int rc;
 
         memset(&tf, 0, sizeof(tf));
         tf.rip = (unsigned long) sthread_trampoline;
@@ -388,12 +443,9 @@ static int launch_sthread(struct sthread *s, stcb_t cb, void *arg)
 
 	_kstate->ks_current = s;
 	load_cr3((unsigned long) s->st_pgroot | CR3_NOFLUSH | s->st_id);
-        rc = dune_jump_to_user(&tf);
+        dune_jump_to_user(&tf);
 	load_cr3((unsigned long) pgroot | CR3_NOFLUSH | 0);
-
-        s->st_ret = (void*) ((long) rc);
-	recycle(s);
-	s->st_state = ST_ZOMBIE;
+	_kstate->ks_current = NULL;
 
 	return 0;
 }
@@ -472,8 +524,8 @@ struct sthread *create_new_sthread(sc_t *sc)
 
 	printf("Creating a new sthread %d\n", s->st_id);
 
-	s->st_next = _sthreads.st_next;
-	_sthreads.st_next = s;
+	s->st_next = _kstate->ks_sthreads.st_next;
+	_kstate->ks_sthreads.st_next = s;
 
 	memcpy(&s->st_sc, sc, sizeof(s->st_sc));
 
@@ -508,7 +560,7 @@ struct sthread *create_new_sthread(sc_t *sc)
 
 int sthread_create(sthread_t *st, sc_t *sc, stcb_t cb, void *arg)
 {
-	struct sthread *s = _sthreads.st_next;
+	struct sthread *s = _kstate->ks_sthreads.st_next;
 
 	/* try to recycle */
 	while (s) {
@@ -532,7 +584,7 @@ int sthread_create(sthread_t *st, sc_t *sc, stcb_t cb, void *arg)
 
 int sthread_join(sthread_t st, void **ret)
 {
-	struct sthread *s = _sthreads.st_next;
+	struct sthread *s = _kstate->ks_sthreads.st_next;
 
 	while (s) {
 		if (s->st_id == st)
@@ -542,6 +594,12 @@ int sthread_join(sthread_t st, void **ret)
 	}
 
 	if (!s)
+		return -1;
+
+	while (s->st_state != ST_ZOMBIE)
+		schedule(NULL);
+
+	if (s->st_state != ST_ZOMBIE)
 		return -1;
 
 	if (ret)

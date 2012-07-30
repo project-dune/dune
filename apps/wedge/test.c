@@ -203,6 +203,74 @@ static void test_syscall(void)
 		errx(1, "buf is %s", buf);
 }
 
+static void *parallel_read(void *arg)
+{
+	int fd = (int) (long) arg;
+	int i, rc;
+	char buf[1024];
+
+	for (i = 0; i < 3; i++) {
+		rc = read(fd, buf, 4);
+		if (rc <= 0)
+			return NULL;
+
+		buf[rc] = 0;
+	}
+
+	if (strcmp(buf, "w00t") == 0)
+		return (void*) 0x666;
+
+	return NULL;
+}
+
+static void *parallel_write(void *arg)
+{
+	int fd = (int) (long) arg;
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		if (write(fd, "w00t", 4) != 4)
+			return NULL;
+	}
+
+	return (void*) 0x667;
+}
+
+static void test_parallel(void)
+{
+	sthread_t st[2];
+	sc_t sc[2];
+	int p[2];
+	void *ret;
+
+	if (pipe(p) == -1)
+		err(1, "pipe()");
+
+	sc_init(&sc[0]);
+	sc_fd_add(&sc[0], p[0], PROT_READ | PROT_WRITE);
+
+	if (sthread_create(&st[0], &sc[0], parallel_read, (void*) (long) p[0]))
+		err(1, "sthread_create()");
+
+	sc_init(&sc[1]);
+	sc_fd_add(&sc[1], p[1], PROT_READ | PROT_WRITE);
+
+	if (sthread_create(&st[1], &sc[1], parallel_write, (void*) (long) p[1]))
+		err(1, "sthread_create()");
+
+	if (sthread_join(st[0], &ret) == -1)
+		err(1, "sthread_join()");
+
+	if (sthread_join(st[1], NULL) == -1)
+		err(1, "sthread_join()");
+
+	if (ret != (void*) 0x666)
+		errx(1, "ret is %p", ret);
+
+	close(p[0]);
+	close(p[1]);
+}
+
 int main(int argc, char *argv[])
 {
 	printf("==== start\n");
@@ -233,6 +301,9 @@ int main(int argc, char *argv[])
 
 	printf("==== syscall\n");
 	test_syscall();
+
+	printf("==== parallel\n");
+	test_parallel();
 
 	printf("==== end\n");
 	exit(0);
