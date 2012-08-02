@@ -184,6 +184,40 @@ __dune_enter:
 	movq	RBX(%rsp), %rbx
 	.endm
 
+/*
+ * macro to switch to G0 fs.base
+ *
+ * NOTE: clobbers %rax, %rdx, and %rcx
+ */
+	.macro SET_G0_FS_BASE
+	movq	%gs:KFS_BASE, %rax
+	movq	%gs:UFS_BASE, %rdx
+	cmp	%rax, %rdx
+	je	1f
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+1:
+	.endm
+
+/*
+ * macro to switch to G3 fs.base
+ *
+ * NOTE: clobbers %rax, %rdx, and %rcx
+ */
+	.macro SET_G3_FS_BASE
+	movq	%gs:UFS_BASE, %rax
+	movq	%gs:KFS_BASE, %rdx
+	cmp	%rax, %rdx
+	je	1f
+	movq	%rax, %rdx
+	shrq	$32, %rdx
+	movl	$MSR_FS_BASE, %ecx
+	wrmsr
+1:
+	.endm
+
 # System Call ABI
 # ---------------
 #
@@ -216,16 +250,8 @@ __dune_syscall:
 	movq	%rax, RSP(%rsp)
 
 	/* then restore the CPL0 FS base address */
-	movq	%gs:KFS_BASE, %rax
-	movq	%gs:UFS_BASE, %rdi
-	cmp	%rax, %rdi
-	je	__dune_syscall_handle
-	movq	%rax, %rdx
-	shrq	$32, %rdx
-	movl	$MSR_FS_BASE, %ecx
-	wrmsr
+	SET_G0_FS_BASE
 
-__dune_syscall_handle:
 	/* then finally re-enable interrupts and jump to the handler */
 	sti
 	movq	%rsp, %rdi /* argument 0 */
@@ -233,16 +259,8 @@ __dune_syscall_handle:
 	call	*%rax
 
 	/* next restore the CPL3 FS base address */
-	movq	%gs:UFS_BASE, %rax
-	movq	%gs:KFS_BASE, %rdi
-	cmp	%rax, %rdi
-	je	__dune_syscall_restore
-	movq	%rax, %rdx
-	shrq	$32, %rdx
-	movl	$MSR_FS_BASE, %ecx
-	wrmsr
+	SET_G3_FS_BASE
 
-__dune_syscall_restore:
 	/* then pop the trap frame off the stack */
 	RESTORE_REGS 0, 1
 	movq	RCX(%rsp), %r10
@@ -282,12 +300,8 @@ dune_jump_to_user:
 	/* save the stack pointer */
 	movq	%rsp, %gs:TRAP_STACK
 
-	/* restore the CPL 3 FS.base */
-	movq	%gs:UFS_BASE, %rax
-	movq	%rax, %rdx
-	shrq	$32, %rdx
-	movl	$MSR_FS_BASE, %ecx
-	wrmsr
+	/* set the CPL 3 FS.base */
+	SET_G3_FS_BASE
 
 	/* jump into G3 */
 	movq	$GD_UT, CS(%rdi)
@@ -342,14 +356,7 @@ __dune_intr_with_num:
 	mov	%cs, %rsi
 	test	$3, %rsi
 	jz	__dune_intr_handler
-	movq	%gs:KFS_BASE, %rax
-	movq	%gs:UFS_BASE, %rsi
-	cmp	%rax, %rsi
-	je	__dune_intr_handler
-	movq	%rax, %rdx
-	shrq	$32, %rdx
-	movl	$MSR_FS_BASE, %ecx
-	wrmsr
+	SET_G0_FS_BASE
 
 __dune_intr_handler:
 	/* setup arguments and call the handler */
@@ -361,14 +368,7 @@ __dune_intr_handler:
 	mov	%cs, %rsi
 	test	$3, %rsi
 	jz	__dune_intr_done
-	movq	%gs:UFS_BASE, %rax
-	movq	%gs:KFS_BASE, %rsi
-	cmp	%rax, %rsi
-	je	__dune_intr_done
-	movq	%rax, %rdx
-	shrq	$32, %rdx
-	movl	$MSR_FS_BASE, %ecx
-	wrmsr
+	SET_G3_FS_BASE
 
 __dune_intr_done:
 	/* load only destructable registers */
