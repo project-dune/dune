@@ -55,7 +55,8 @@
 #define TMP		(0)
 #define KFS_BASE	(8)
 #define UFS_BASE	(16)
-#define TRAP_STACK	(28)
+#define IN_USERMODE	(24)
+#define TRAP_STACK	(36)
 
 .data
 stack:
@@ -190,6 +191,7 @@ __dune_enter:
  * NOTE: clobbers %rax, %rdx, and %rcx
  */
 	.macro SET_G0_FS_BASE
+	movq	$0, %gs:IN_USERMODE
 	movq	%gs:KFS_BASE, %rax
 	movq	%gs:UFS_BASE, %rdx
 	cmp	%rax, %rdx
@@ -207,6 +209,7 @@ __dune_enter:
  * NOTE: clobbers %rax, %rdx, and %rcx
  */
 	.macro SET_G3_FS_BASE
+	movq	$1, %gs:IN_USERMODE
 	movq	%gs:UFS_BASE, %rax
 	movq	%gs:KFS_BASE, %rdx
 	cmp	%rax, %rdx
@@ -236,6 +239,16 @@ __dune_enter:
 # XXX don't do relative jumps - watch out code is memcpy
 .globl __dune_syscall
 __dune_syscall:
+	/* handle system calls from G0 */
+	testq $1, %gs:IN_USERMODE
+	jnz 1f
+	xchg	%rax, %r11
+	sahf
+	movq	%r11, %rax
+	vmcall
+	jmp	*%rcx
+
+1:
 	/* first switch to the kernel stack */
 	movq	%rsp, %gs:TMP
 	movq	%gs:TRAP_STACK, %rsp

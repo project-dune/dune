@@ -48,6 +48,7 @@ struct dune_percpu {
 	uint64_t tmp;
 	uint64_t kfs_base;
 	uint64_t ufs_base;
+	uint64_t in_usermode;
 	struct Tss tss;
 	uint64_t gdt[NR_GDT_ENTRIES];
 } __attribute__((packed));
@@ -349,6 +350,7 @@ int dune_enter(void)
 
 	percpu->kfs_base = arch_fs;
 	percpu->ufs_base = arch_fs;
+	percpu->in_usermode = 0;
 
 #if 0
 	// NOTE: early versions of Dune required memory locking
