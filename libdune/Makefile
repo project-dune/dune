@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -Wall -g -O2 -MD
+CFLAGS  = -Wall -g -O3 -MD
 LDFLAGS = -static -L. -ldune
 OBJ     = dune.o vsyscall.o elf.o entry.o vm.o util.o trap.o page.o procmap.o
 
