@@ -242,10 +242,10 @@ __dune_syscall:
 	/* handle system calls from G0 */
 	testq $1, %gs:IN_USERMODE
 	jnz 1f
+	vmcall
 	xchg	%rax, %r11
 	sahf
 	movq	%r11, %rax
-	vmcall
 	jmp	*%rcx
 
 1:
