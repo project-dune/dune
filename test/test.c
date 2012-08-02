@@ -21,7 +21,7 @@ static int test_fork(void)
 	int pid;
 	int rc;
 
-	if (dune_init())
+	if (dune_enter())
 		return 1;
 
 	if (check_dune())
@@ -33,6 +33,9 @@ static int test_fork(void)
 
 	/* child */
 	if (pid == 0) {
+		if (dune_enter())
+			return 1;
+
 		if (check_dune())
 			exit(1);
 
@@ -53,6 +56,9 @@ static int test_fork(void)
 
 static void *test_pthread_thread(void *arg)
 {
+	if (dune_enter())
+		return NULL;
+
 	if (check_dune())
 		return NULL;
 
@@ -64,7 +70,7 @@ static int test_pthread(void)
 	pthread_t pt;
 	void *ret;
 
-	if (dune_init())
+	if (dune_enter())
 		return 1;
 
 	if (check_dune())
@@ -99,7 +105,7 @@ static int test_signal(void)
 {
 	int pid;
 
-	if (dune_init())
+	if (dune_enter())
 		return 1;
 
 	pid = 0;
@@ -158,7 +164,13 @@ static void run_test(struct test *t)
 
 int main(int argc, char *argv[])
 {
-	int i;
+	int i, ret;
+
+	ret = dune_init_and_enter();
+	if (ret) {
+		printf("failed to initialize dune\n");
+		return ret;
+	}
 
 	printf("Doing tests\n");
 

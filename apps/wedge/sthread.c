@@ -401,7 +401,7 @@ int sthread_init(void)
 {
 	checkpoint_prepare();
 
-	if (dune_init())
+	if (dune_init_and_enter())
 		return -1;
 
         dune_register_syscall_handler(syscall_handler);

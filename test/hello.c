@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 
 	printf("hello: not running dune yet\n");
 
-	ret = dune_init();
+	ret = dune_init_and_enter();
 	if (ret) {
 		printf("failed to initialize dune\n");
 		return ret;

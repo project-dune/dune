@@ -281,9 +281,15 @@ int main(int argc, char *argv[])
 
 	printf("%s\n", environ[0]);
 
-	ret = dune_init_ex(0);
+	ret = dune_init(0);
 	if (ret) {
-		printf("failed to initialize DUNE\n");
+		printf("sandbox: failed to initialize Dune\n");
+		return ret;
+	}
+
+	ret = dune_enter();
+	if (ret) {
+		printf("sandbox: failed to enter Dune mode\n");
 		return ret;
 	}
 
@@ -306,8 +312,6 @@ int main(int argc, char *argv[])
 		printf("failed to alloc stack\n");
 		return ret;
 	}
-
-//	dune_procmap_dump();
 
 	sp = setup_arguments(sp, argv[1], &argv[2], environ, data);
 	if (!sp) {

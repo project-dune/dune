@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "dune.h"
 

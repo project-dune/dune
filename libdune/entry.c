@@ -22,36 +22,34 @@
 #include "dune.h"
 #include "mmu.h"
 #include "cpu-x86.h"
+#include "local.h"
 
-extern int arch_prctl(int code, unsigned long *addr);
-extern int dune_page_init(void);
-
-// these are assembly routines from dune.S
-extern int __dune_enter(int fd, struct dune_config *config);
-extern int __dune_ret(void);
-extern void __dune_syscall(void);
-extern void __dune_syscall_end(void);
-extern void __dune_intr(void);
-
-extern char __dune_vsyscall_page;
-
-#define ISR_LEN 16
-
-#define __str_t(x...)	#x
-#define __str(x...)	__str_t(x)
-
-#define PHYSICAL_ADDR_BITS ((__u64) 1 << 36)
-
- ptent_t *pgroot;
-static uint64_t arch_fs;
+ptent_t *pgroot;
 uintptr_t mmap_base;
 uintptr_t stack_base;
+
+static int dune_fd;
+
+static struct idtd idt[IDT_ENTRIES];
+
+static uint64_t gdt_template[NR_GDT_ENTRIES] = {
+	0,
+	0,
+	SEG64(SEG_X | SEG_R, 0),
+	SEG64(SEG_W, 0),
+	0,
+	SEG64(SEG_W, 3),
+	SEG64(SEG_X | SEG_R, 3),
+	0,
+	0,
+};
 
 struct dune_percpu {
 	uint64_t tmp;
 	uint64_t kfs_base;
 	uint64_t ufs_base;
 	struct Tss tss;
+	uint64_t gdt[NR_GDT_ENTRIES];
 } __attribute__((packed));
 
 unsigned long dune_get_user_fs(void)
@@ -68,64 +66,56 @@ void dune_set_user_fs(unsigned long fs_base)
 	     [ufs_base]"i"(offsetof(struct dune_percpu, ufs_base)));
 }
 
-static uint64_t gdt[9] = {
-	0,
-	0,
-	SEG64(SEG_X | SEG_R, 0),
-	SEG64(SEG_W, 0),
-	0,
-	SEG64(SEG_W, 3),
-	SEG64(SEG_X | SEG_R, 3),
-	0,
-	0,
-};
-
-static struct idtd idt[IDT_ENTRIES];
-
 static int setup_safe_stack(struct dune_percpu *percpu)
 {
 	int i;
-	struct page *p = dune_page_alloc();
-	if (!p)
+	char *safe_stack = memalign(PGSIZE, PGSIZE);
+	if (!safe_stack)
 		return -ENOMEM;
+	safe_stack += PGSIZE;
+
+	percpu->tss.tss_iomb = offsetof(struct Tss, tss_iopb);
 
 	for (i = 1; i < 8; i++)
-		percpu->tss.tss_ist[i] = dune_page2pa(p) + PGSIZE;
+		percpu->tss.tss_ist[i] = (uintptr_t) safe_stack;
 
-	/* setup later on jump to G3 */
-	percpu->tss.tss_rsp[0] = dune_page2pa(p) + PGSIZE;
+	/* changed later on jump to G3 */
+	percpu->tss.tss_rsp[0] = (uintptr_t) safe_stack;
 
 	return 0;
 }
 
 static void setup_gdt(struct dune_percpu *percpu)
+{	
+	memcpy(percpu->gdt, gdt_template, sizeof(uint64_t) * NR_GDT_ENTRIES);
+
+	percpu->gdt[GD_TSS >> 3] = (SEG_TSSA | SEG_P | SEG_A |
+				    SEG_BASELO(&percpu->tss) |
+				    SEG_LIM(sizeof(struct Tss) - 1));
+	percpu->gdt[GD_TSS2 >> 3] = SEG_BASEHI(&percpu->tss);
+}
+
+static void __dune_boot(struct dune_percpu *percpu)
 {
-	struct tptr _gdtr;
+	struct tptr _idtr, _gdtr;
 
-	_gdtr.base  = (uint64_t) &gdt;
-	_gdtr.limit = sizeof(gdt) - 1;
+	_gdtr.base  = (uint64_t) &percpu->gdt;
+	_gdtr.limit = sizeof(percpu->gdt) - 1;
 
-	gdt[GD_TSS >> 3] = (SEG_TSSA | SEG_P | SEG_A |
-			    SEG_BASELO(&percpu->tss) |
-			    SEG_LIM(sizeof(struct Tss) - 1));
-	gdt[GD_TSS2 >> 3] = SEG_BASEHI(&percpu->tss);
-
-	percpu->tss.tss_iomb = offsetof(struct Tss, tss_iopb);
-	setup_safe_stack(percpu);
+	_idtr.base = (uint64_t) &idt;
+	_idtr.limit = sizeof(idt) - 1;
 
 	asm volatile (
+		// STEP 1: load the new GDT
 		"lgdt %0\n"
 
-		/* data */
+		// STEP 2: initialize data segements
 		"mov $" __str(GD_KD) ", %%ax\n"
 		"mov %%ax, %%ds\n"
 		"mov %%ax, %%es\n"
-		"mov %%ax, %%gs\n"
 		"mov %%ax, %%ss\n"
 
-		// NOTE: fs.base and gs.base is set by MSR on x86_64
-
-		/* text */
+		// STEP 3: long jump into the new code segment
 		"mov $" __str(GD_KT) ", %%rax\n"
 		"pushq %%rax\n"
 		"pushq $.flush\n"
@@ -133,16 +123,38 @@ static void setup_gdt(struct dune_percpu *percpu)
 		".flush:\n"
 		"nop\n"
 
-		/* task register */
+		// STEP 4: load the task register (for safe stack switching)
 		"mov $" __str(GD_TSS) ", %%ax\n"
 		"ltr %%ax\n"
 
-		: : "m" (_gdtr) : "rax");
+		// STEP 5: load the new IDT and enable interrupts
+		"lidt %1\n"
+		"sti\n"
 
-	wrmsrl(MSR_FS_BASE, arch_fs);
+		: : "m" (_gdtr), "m" (_idtr) : "rax");
+	
+	// STEP 6: FS and GS require special initialization on 64-bit
+	wrmsrl(MSR_FS_BASE, percpu->kfs_base);
 	wrmsrl(MSR_GS_BASE, (unsigned long) percpu);
-
 }
+
+/**
+ * dune_boot - Brings the user-level OS online
+ */
+static int dune_boot(struct dune_percpu *percpu)
+{
+	int ret;
+
+	if ((ret = setup_safe_stack(percpu)))
+		return ret;
+
+	setup_gdt(percpu);
+	__dune_boot(percpu);
+
+	return 0;
+}
+
+#define ISR_LEN 16
 
 static inline void set_idt_addr(struct idtd *id, physaddr_t addr)
 {       
@@ -153,11 +165,7 @@ static inline void set_idt_addr(struct idtd *id, physaddr_t addr)
 
 static void setup_idt(void)
 {
-	struct tptr _idtr;
 	int i;
-	
-	_idtr.base = (uint64_t) &idt;
-	_idtr.limit = sizeof(idt) - 1;
 
 	for (i = 0; i < IDT_ENTRIES; i++) {
 		struct idtd *id = &idt[i];
@@ -175,23 +183,9 @@ static void setup_idt(void)
 
 		set_idt_addr(id, isr);
 	}
-
-	asm volatile (
-		"lidt %0\n"
-		"sti\n"
-		: : "m" (_idtr));
 }
 
-/**
- * dune_boot - Brings the user-level OS online
- */
-static void dune_boot(struct dune_percpu *percpu)
-{
-	setup_gdt(percpu);
-	setup_idt();
-}
-
-static void setup_syscall(int dune_fd)
+static int setup_syscall(void)
 {
 	unsigned long lstar;
 	unsigned long lstara;
@@ -205,27 +199,29 @@ static void setup_syscall(int dune_fd)
 
 	lstar = ioctl(dune_fd, DUNE_GET_SYSCALL);
 	if (lstar == -1)
-		err(1, "ioctl(DUNE_GET_SYSCALL)");
+		return -errno;
 
 	page = mmap((void *) NULL, PGSIZE * 2,
 		    PROT_READ | PROT_WRITE | PROT_EXEC,
 		    MAP_PRIVATE | MAP_ANON, -1, 0);
 
 	if (page == MAP_FAILED)
-		err(1, "mmap()");
+		return -errno;
 
 	lstara = lstar & ~(PGSIZE - 1);
 	off = lstar - lstara;
 
 	memcpy(page + off, __dune_syscall, 
-		(unsigned long) __dune_syscall_end - (unsigned long)
-		__dune_syscall);
+		(unsigned long) __dune_syscall_end -
+		(unsigned long) __dune_syscall);
 
 	for (i = 0; i <= PGSIZE; i += PGSIZE) {
 		uintptr_t pa = dune_mmap_addr_to_pa(page + i);
 		dune_vm_lookup(pgroot, (void *) (lstara + i), 1, &pte);
 		*pte = PTE_ADDR(pa) | PTE_P;
 	}
+	
+	return 0;
 }
 
 #define VSYSCALL_ADDR 0xffffffffff600000
@@ -238,7 +234,7 @@ static void setup_vsyscall(void)
 	*pte = PTE_ADDR(dune_va_to_pa(&__dune_vsyscall_page)) | PTE_P | PTE_U;
 }
 
-static void procmap_cb(const struct dune_procmap_entry *ent)
+static void __setup_mappings_cb(const struct dune_procmap_entry *ent)
 {
 	int perm = PERM_NONE;
 	int ret;
@@ -266,7 +262,7 @@ static void procmap_cb(const struct dune_procmap_entry *ent)
 	assert(!ret);
 }
 
-static int setup_layout_fast(void)
+static int __setup_mappings_precise(void)
 {
 	int ret;
 
@@ -277,12 +273,12 @@ static int setup_layout_fast(void)
 	if (ret)
 		return ret;
 
-	dune_procmap_iterate(&procmap_cb);
+	dune_procmap_iterate(&__setup_mappings_cb);
 
 	return 0;
 }
 
-static int setup_layout_safe(struct dune_layout *layout)
+static int __setup_mappings_full(struct dune_layout *layout)
 {
 	int ret;
 
@@ -303,52 +299,48 @@ static int setup_layout_safe(struct dune_layout *layout)
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
-	
+
 	setup_vsyscall();
 
 	return 0;
 }
 
-static int setup_layout(int fd, bool safe)
+static int setup_mappings(bool full)
 {
 	struct dune_layout layout;
-	int ret = ioctl(fd, DUNE_GET_LAYOUT, &layout);
+	int ret = ioctl(dune_fd, DUNE_GET_LAYOUT, &layout);
 	if (ret)
 		return ret;
 
 	mmap_base = layout.base_map;
 	stack_base = layout.base_stack;
 
-	if (safe)
-		ret = setup_layout_safe(&layout);
+	if (full)
+		ret = __setup_mappings_full(&layout);
 	else
-		ret = setup_layout_fast();
+		ret = __setup_mappings_precise();
 
 	return ret;
 }
 
-static void init_after_fork(void)
-{
-	if (dune_init())
-		err(1, "dune_init()");
-}
-
 /**
- * dune_init_ex - Enables DUNE mode for the currently running process
+ * dune_enter - transitions a process to "Dune mode"
  * 
- * @map_all: setup the entire address space instead of just the mapped regions
+ * Must be called within each forked child and/or each new thread
+ * if you want to remain in "Dune mode".
  * 
- * Returns 0 on success, otherwise failure
+ * Returns 0 on success, otherwise failure.
  */
-int dune_init_ex(bool map_all)
+int dune_enter(void)
 {
-	int ret = 0, dune_fd, i;
 	struct dune_percpu *percpu;
 	struct dune_config conf;
+	uint64_t arch_fs;
+	int ret;
 
 	if (arch_prctl(ARCH_GET_FS, &arch_fs) == -1) {
 		printf("dune: failed to get FS register\n");
-		return -EIO;
+		return -errno;
 	}
 
 	percpu = malloc(sizeof(struct dune_percpu));
@@ -358,41 +350,87 @@ int dune_init_ex(bool map_all)
 	percpu->kfs_base = arch_fs;
 	percpu->ufs_base = arch_fs;
 
-	dune_fd = open("/dev/dune", O_RDWR);
-	if (dune_fd <= 0) {
-		printf("dune: failed to open DUNE device\n");
-		return -EIO;
+#if 0
+	// NOTE: early versions of Dune required memory locking
+	if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
+		printf("dune: failed to lock memory\n");
+		ret = -EIO;
+		goto fail_enter;
 	}
-
-	pgroot = memalign(PGSIZE, PGSIZE);
-	if (!pgroot)
-		return -ENOMEM;
-	memset(pgroot, 0, PGSIZE);
+#endif
 
 	conf.rip = (__u64) &__dune_ret;
 	conf.rsp = 0;
 	conf.cr3 = (physaddr_t) pgroot;
+
+	ret = __dune_enter(dune_fd, &conf);
+	if (ret) {
+		printf("dune: entry to Dune mode failed\n");
+		goto fail_enter;
+	}
+
+	ret = dune_boot(percpu);
+	if (ret) {
+		printf("dune: problem while booting, unrecoverable\n");
+		dune_die();
+	}
+
+	return 0;
+
+fail_enter:
+	free(percpu);
+	return ret;
+}
+
+/**
+ * dune_init - initializes libdune
+ * 
+ * @map_full: determines if the full process address space should be mapped
+ * 
+ * Call this function once before using libdune.
+ * 
+ * Full mappings are typically used for testing and debugging. When
+ * disabled, a much more efficient approach where only address ranges
+ * mapped into memory are reflected in the guest page table. However,
+ * this introduces an additional challenge in that any changes to
+ * the process address space require an update to the page table.
+ * 
+ * Returns 0 on success, otherwise failure.
+ */
+int dune_init(bool map_full)
+{
+	int ret, i;
+
+	dune_fd = open("/dev/dune", O_RDWR);
+	if (dune_fd <= 0) {
+		printf("dune: failed to open Dune device\n");
+		ret = -errno;
+		goto fail_open;
+	}
+
+	pgroot = memalign(PGSIZE, PGSIZE);
+	if (!pgroot) {
+		ret = -ENOMEM;
+		goto fail_pgroot;
+	}
+	memset(pgroot, 0, PGSIZE);
 
 	if ((ret = dune_page_init())) {
 		printf("dune: unable to initialize page manager\n");
 		goto err;
 	}
 
-	if ((ret = setup_layout(dune_fd, map_all))) {
+	if ((ret = setup_mappings(map_full))) {
 		printf("dune: unable to setup memory layout\n");
 		goto err;
 	}
 
-	setup_syscall(dune_fd);
-
-#if 0
-	if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
-		printf("dune: failed to lock memory\n");
-		ret = -EIO;
+	if ((ret = setup_syscall())) {
+		printf("dune: unable to setup system calls\n");
 		goto err;
 	}
-#endif
 
+	// disable signals for now until we have better support
 	for (i = 1; i < 32; i++) {
 		struct sigaction sa;
 
@@ -411,26 +449,15 @@ int dune_init_ex(bool map_all)
 			err(1, "sigaction() %d", i);
 	}
 
-	if (pthread_atfork(NULL, NULL, init_after_fork))
-		err(1, "pthread_atfork()");
-
-	ret = __dune_enter(dune_fd, &conf);
-	if (ret) {
-		printf("dune: entry to DUNE mode failed\n");
-		ret = -EIO;
-		goto err;
-	}
-
-	dune_boot(percpu);
-
+	setup_idt();
+	
 	return 0;
 
 err:
+	// FIXME: need to free memory
+fail_pgroot:
 	close(dune_fd);
+fail_open:
 	return ret;
 }
 
-int dune_init(void)
-{
-	return dune_init_ex(1);
-}

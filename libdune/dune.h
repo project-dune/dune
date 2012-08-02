@@ -44,12 +44,13 @@ if (!(expr)) { \
  * matter, since ia-32e mode ignores most of segment values anyway,
  * but just to be extra careful we match data as well.
  */
-#define GD_KT	0x10
-#define GD_KD	0x18
-#define GD_UD	0x28
-#define GD_UT	0x30
-#define GD_TSS	0x38
-#define GD_TSS2	0x40
+#define GD_KT		0x10
+#define GD_KD		0x18
+#define GD_UD		0x28
+#define GD_UT		0x30
+#define GD_TSS		0x38
+#define GD_TSS2		0x40
+#define NR_GDT_ENTRIES	9
 
 struct dune_tf {
 	/* manually saved, arguments */
@@ -307,7 +308,26 @@ extern int dune_elf_iter_sh(struct dune_elf *elf, dune_elf_shcb cb);
 extern int dune_elf_iter_ph(struct dune_elf *elf, dune_elf_phcb cb);
 extern int dune_elf_load_ph(struct dune_elf *elf, Elf64_Phdr *phdr, off_t off);
 
-// entry routine
+// entry routines
 
-extern int dune_init_ex(bool map_all);
-extern int dune_init(void);
+extern int dune_enter(void);
+extern int dune_init(bool map_full);
+
+/**
+ * dune_init_and_enter - initializes libdune and enters "Dune mode"
+ * 
+ * This is a simple initialization routine that handles everything
+ * in one go. Note that you still need to call dune_enter() in
+ * each new forked child or thread.
+ * 
+ * Returns 0 on success, otherwise failure.
+ */
+static inline int dune_init_and_enter(void)
+{
+	int ret;
+	
+	if ((ret = dune_init(1)))
+		return ret;
+	
+	return dune_enter();
+}

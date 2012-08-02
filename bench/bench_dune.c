@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
 	int ret;
 	unsigned long tsc;
 
-	ret = dune_init();
+	ret = dune_init_and_enter();
 	if (ret) {
 		printf("failed to initialize dune\n");
 		return ret;

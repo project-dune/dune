@@ -377,8 +377,8 @@ static void bench_switch(int pages, int pages_end)
 
 	printf("Crap %p crap2 %p\n", _crap, _crap2);
 
-	if (dune_init())
-		errx(1, "dune_init()");
+	if (dune_init_and_enter())
+		errx(1, "dune_init_and_enter()");
 
 	_use_vmcall_gettimeofday = 1;
 
