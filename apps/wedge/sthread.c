@@ -30,7 +30,7 @@ struct sthread {
 	struct dune_tf	st_tf;
 	sc_t		st_sc;
 	unsigned char	*st_writable;
-	int		st_walk;
+	unsigned long	st_walk;
 	struct sthread	*st_next;
 };
 
@@ -230,6 +230,45 @@ static void schedule(struct dune_tf *tf)
 	abort();
 }
 
+static int walk_check_perm(const void *arg, ptent_t *ptep, void *va)
+{
+	struct sthread *s = (void*) arg;
+
+	if (!(*ptep & PTE_U))
+		return 1;
+
+	if (!(*ptep & PTE_P))
+		return 1;
+
+	if (!(*ptep & PTE_W))
+		return 1;
+
+//	dune_printf("Check addr VA %p PA %p\n", va, (void*) PTE_ADDR(*ptep));
+
+	if (!s->st_walk) {
+		unsigned long addr = PTE_ADDR(*ptep);
+
+		if (addr >= 0x400000000)
+			addr = addr + mmap_base - 0x400000000;
+
+		s->st_walk = addr;
+	}
+
+	return 0;
+}
+
+static int has_mem_perm(struct sthread *s, void *ptr, unsigned long len)
+{
+	int rc;
+
+	s->st_walk = 0;
+	rc = dune_vm_page_walk(s->st_pgroot, ptr,
+			       (void*) ((unsigned long) ptr + len),
+			       walk_check_perm, s);
+
+	return rc == 0;
+}
+
 static void syscall_handler(struct dune_tf *tf)
 {
         int syscall_num = (int) tf->rax;
@@ -237,6 +276,8 @@ static void syscall_handler(struct dune_tf *tf)
 	int fd = -1, perm = -1;
 	int rc;
 	int need_resched = 0;
+	unsigned long *ptr = NULL;
+	unsigned long len = 0;
 
 //	dune_printf("SYSCALL %d current %p\n", syscall_num, _kstate->ks_current);
 
@@ -265,6 +306,29 @@ static void syscall_handler(struct dune_tf *tf)
 	if (perm != -1) {
 		if (!has_fd_perm(current, fd, perm))
 			goto __blocked;
+	}
+
+	/* check memory */
+	switch (syscall_num) {
+	case SYS_open:
+		ptr = &tf->rdi;
+		len = strlen((void*) *ptr); /* XXX */
+		break;
+
+	case SYS_write:
+	case SYS_read:
+		ptr = &tf->rsi;
+		len = ARG2(tf);
+		break;
+	}
+
+	if (ptr) {
+		assert(current->st_walk);
+		if (!has_mem_perm(current, (void*) *ptr, len))
+			goto __blocked;
+
+		/* XXX */
+		*ptr = current->st_walk + (*ptr & 0xfff);
 	}
 
 	/* special treatment */
