@@ -377,14 +377,16 @@ void dune_vm_unmap(ptent_t *root, void *va, size_t len)
 
  void dune_vm_default_pgflt_handler(uintptr_t addr, uint64_t fec)
 {
-	ptent_t *pte;
+	ptent_t *pte = NULL;
+	int rc;
 
 	/*
 	 * Assert on present and reserved bits.
 	 */
 	assert(!(fec & (FEC_P | FEC_RSV)));
 
-	dune_vm_lookup(pgroot, (void *) addr, 0, &pte);
+	rc = dune_vm_lookup(pgroot, (void *) addr, 0, &pte);
+	assert(rc == 0);
 
 	if ((fec & FEC_W) && (*pte & PTE_COW)) {
 		void *newPage;
