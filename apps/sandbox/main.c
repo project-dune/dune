@@ -270,7 +270,7 @@ static int run_app(uintptr_t sp, uintptr_t e_entry)
 
 extern char **environ;
 
-int main(int argc, char *argv[])
+int boxer_main(int argc, char *argv[])
 {
 	int ret;
 	uintptr_t sp;

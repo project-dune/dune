@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include <asm/unistd_64.h>
+#include <sys/syscall.h>
 #include <asm/prctl.h>
 #include <sys/utsname.h>
 #include <sys/stat.h>
@@ -16,6 +16,9 @@
 #include <utime.h>
 
 #include "sandbox.h"
+#include "boxer.h"
+
+static boxer_syscall_cb _syscall_monitor;
 
 static void
 pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
@@ -80,238 +83,150 @@ static inline long get_err(long ret)
 		return ret;
 }
 
-static int sys_uname(struct utsname *buf)
+void boxer_register_syscall_monitor(boxer_syscall_cb cb)
 {
-	if (check_extent((void *) buf, sizeof(struct utsname)))
-		return -EFAULT;
-
-	return get_err(uname(buf));
+	_syscall_monitor = cb;
 }
 
-static int sys_arch_prctl(int cmd, unsigned long data)
+static int syscall_check_params(struct dune_tf *tf)
 {
-	if (cmd == ARCH_GET_FS) {
-		unsigned long *ptr = (unsigned long *) data;
-		if (check_extent(ptr, sizeof(unsigned long)))
-			return -EFAULT;
-		*ptr = dune_get_user_fs();
-		return 0;
-	} else if (cmd == ARCH_SET_FS) {
-		dune_set_user_fs(data);
-		return 0;
+	void *ptr = NULL;
+	uint64_t len = 0;
+	char *str = NULL;
+	int err = 0;
+
+	switch (tf->rax) {
+	case SYS_uname:
+		ptr = (void*) ARG0(tf);
+		len = sizeof(struct utsname);
+		break;
+
+	case SYS_arch_prctl:
+		if (ARG0(tf) == ARCH_GET_FS) {
+			ptr = (void*) ARG1(tf);
+			len = sizeof(unsigned long);
+		}
+		break;
+
+	case SYS_open:
+	case SYS_unlink:
+		str = (char*) ARG0(tf);
+		break;
+
+	case SYS_read:
+	case SYS_write:
+		ptr = (void*) ARG1(tf);
+		len = ARG2(tf);
+		break;
+
+	case SYS_stat:
+	case SYS_lstat:
+		str = (char*) ARG0(tf);
+	case SYS_fstat:
+		ptr = (void*) ARG1(tf);
+		len = sizeof(struct stat);
+		break;
+
+	/* XXX - doesn't belong here */
+	case SYS_close:
+		if (ARG0(tf) < 3) {
+			tf->rax = 0;
+			return -1;
+		}
+		break;
+
+	/* XXX */
+	case SYS_fcntl:
+		if (ARG1(tf) != F_GETFL)
+			err = -EINVAL;
+		break;
 	}
 
-	return -EINVAL;
+	if (ptr != NULL && len != 0 && check_extent(ptr, len))
+		err = -EFAULT;
+
+	if (str != NULL && check_string(str))
+		err = -EFAULT;
+
+	if (err) {
+		tf->rax = err;
+		return -1;
+	}
+
+	return 0;
 }
 
-static int sys_open(const char *pathname, int flags)
+static int syscall_allow(struct dune_tf *tf)
 {
-	if (check_string(pathname))
-		return -EFAULT;
-
-	printf("opening file %s\n", pathname);
-	int ret = open(pathname, flags);
-	return get_err(ret);
-
-	//return get_err(open(pathname, flags));
-}
-
-static int sys_close(int fd)
-{
-	if (fd < 3)
+	if (!_syscall_monitor)
 		return 0;
-	return get_err(close(fd));
+
+	return _syscall_monitor(tf);
 }
 
-static ssize_t sys_read(int fd, void *buf, size_t count)
+static void syscall_do(struct dune_tf *tf)
 {
-	if (check_extent(buf, count))
-		return -EFAULT;
+	switch (tf->rax) {
+	case SYS_arch_prctl:
+		switch (ARG0(tf)) {
+		case ARCH_GET_FS:
+			*((unsigned long*) ARG1(tf)) = dune_get_user_fs();
+			tf->rax = 0;
+			break;
 
-	return get_err(read(fd, buf, count));
-}
+		case ARCH_SET_FS:
+			dune_set_user_fs(ARG1(tf));
+			tf->rax = 0;
+			break;
 
-static ssize_t sys_write(int fd, const void *buf, size_t count)
-{
-	if (check_extent(buf, count))
-		return -EFAULT;
-
-	return get_err(write(fd, buf, count));
-}
-
-static ssize_t sys_writev(int fd, const struct iovec *iov, int iovcnt)
-{
-	return get_err(writev(fd, iov, iovcnt));
-}
-
-static int sys_fstat(int fd, struct stat *buf)
-{
-	if (check_extent((void *) buf, sizeof(struct stat)))
-		return -EFAULT;
-
-	return get_err(fstat(fd, buf));
-}
-
-static int sys_lstat(const char *pathname, struct stat *buf)
-{
-	if (check_extent((void *) buf, sizeof(struct stat)))
-		return -EFAULT;
-
-	return get_err(lstat(pathname, buf));
-}
-
-static int sys_stat(const char *pathname, struct stat *buf)
-{
-	if (check_extent((void *) buf, sizeof(struct stat)))
-		return -EFAULT;
-
-	return get_err(stat(pathname, buf));
-}
-
-static off_t sys_lseek(int fd, off_t off, int whence)
-{
-	return get_err(lseek(fd, off, whence));
-}
-
-static int sys_fcntl(int fd, int cmd)
-{
-	if (cmd != F_GETFL)
-		return -EINVAL;
-
-	return get_err(fcntl(fd, F_GETFL));
-}
-
-static int sys_fchmod(int fd, mode_t mode)
-{
-	return get_err(fchmod(fd, mode));
-}
-
-static int sys_fchown(int fd, uid_t owner, gid_t group)
-{
-	return get_err(fchown(fd, owner, group));
-}
-
-static int sys_unlink(char *path)
-{
-	return get_err(unlink(path));
-}
-
-static int sys_utime(const char *path,
-		     const struct utimbuf *times)
-{
-	return get_err(utime(path, times));
-}
-
-static void syscall_handler(struct dune_tf *tf)
-{
-	uint64_t syscall_num = tf->rax;
-//	printf("got syscall #%ld\n", syscall_num);
-
-	switch (syscall_num) {
-	case __NR_uname:
-		tf->rax = sys_uname((struct utsname *) ARG0(tf));
+		default:
+			tf->rax = -EINVAL;
+			break;
+		}
 		break;
 
-	case __NR_arch_prctl:
-		tf->rax = sys_arch_prctl((int) ARG0(tf),
-					 (unsigned long) ARG1(tf));
-		break;
-
-	case __NR_open:
-		tf->rax = sys_open((char *) ARG0(tf), ARG1(tf));
-		break;
-
-	case __NR_close:
-		tf->rax = sys_close(ARG0(tf));
-		break;
-
-	case __NR_read:
-		tf->rax = sys_read(ARG0(tf), (void *) ARG1(tf),
-				   (size_t) ARG2(tf));
-		break;
-
-	case __NR_write:
-		tf->rax = sys_write(ARG0(tf), (void *) ARG1(tf),
-				    (size_t) ARG2(tf));
-		break;
-
-	case __NR_writev:
-		dune_dump_trap_frame(tf);
-		tf->rax = sys_writev((int) ARG0(tf), (struct iovec *) ARG1(tf),
-				     (int) ARG2(tf));
-		break;
-
-	case __NR_stat:
-		tf->rax = sys_stat((char *) ARG0(tf),
-				   (struct stat *) ARG1(tf));
-		break;
-
-	case __NR_fstat:
-		tf->rax = sys_fstat(ARG0(tf), (struct stat *) ARG1(tf));
-		break;
-
-	case __NR_lstat:
-		tf->rax = sys_lstat((char *) ARG0(tf),
-				    (struct stat *) ARG1(tf));
-		break;
-
-	case __NR_lseek:
-		tf->rax = sys_lseek(ARG0(tf), ARG1(tf), ARG2(tf));
-		break;
-
-	case __NR_fcntl:
-		tf->rax = sys_fcntl((int) ARG0(tf), (int) ARG1(tf));
-		break;
-
-	case __NR_fchmod:
-		tf->rax = sys_fchmod((int) ARG0(tf), (mode_t) ARG1(tf));
-		break;
-
-	case __NR_fchown:
-		tf->rax = sys_fchown((int) ARG0(tf), (uid_t) ARG1(tf),
-				     (gid_t) ARG2(tf));
-		break;
-
-	case __NR_unlink:
-		tf->rax = sys_unlink((char *) ARG0(tf));
-		break;
-
-	case __NR_utime:
-		tf->rax = sys_utime((char *) ARG0(tf),
-				    (struct utimbuf *) ARG1(tf));
-		break;
-
-	case __NR_brk:
+	case SYS_brk:
 		tf->rax = umm_brk((unsigned long) ARG0(tf));
 		break;
 
-	case __NR_mmap:
+	case SYS_mmap:
 		tf->rax = (unsigned long) umm_mmap((void *) ARG0(tf),
 			(size_t) ARG1(tf), (int) ARG2(tf), (int) ARG3(tf),
 			(int) ARG4(tf), (off_t) ARG5(tf));
 		break;
 
-	case __NR_mprotect:
+	case SYS_mprotect:
 		tf->rax = umm_mprotect((void *) ARG0(tf),
 				       (size_t) ARG1(tf),
 				       ARG2(tf));
 		break;
 
-	case __NR_munmap:
+	case SYS_munmap:
 		tf->rax = umm_munmap((void *) ARG0(tf), (size_t) ARG1(tf)); 
 		break;
 
-	case __NR_exit_group:
-	case __NR_exit:
+	case SYS_exit_group:
+	case SYS_exit:
 		dune_ret_from_user(ARG0(tf));
+		break;
 
 	default:
-//		printf("sandbox: unsupported syscall #%ld\n", syscall_num);
-		dune_passthrough_syscall(tf); // FIXME: temporary stopgap
-		//tf->rax = -ENOSYS;
+		dune_passthrough_syscall(tf);
+		break;
+	}
+}
+
+static void syscall_handler(struct dune_tf *tf)
+{
+	if (syscall_check_params(tf) == -1)
+		return;
+
+	if (!syscall_allow(tf)) {
+		tf->rax = -EPERM;
+		return;
 	}
 
-//	printf("ret is %ld\n", tf->rax);
+	syscall_do(tf);
 }
 
 int trap_init(void)
