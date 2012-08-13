@@ -158,8 +158,10 @@ static int syscall_check_params(struct dune_tf *tf)
 
 static int syscall_allow(struct dune_tf *tf)
 {
-	if (!_syscall_monitor)
+	if (!_syscall_monitor) {
+		tf->rax = -EPERM;
 		return 0;
+	}
 
 	return _syscall_monitor(tf);
 }
@@ -221,10 +223,8 @@ static void syscall_handler(struct dune_tf *tf)
 	if (syscall_check_params(tf) == -1)
 		return;
 
-	if (!syscall_allow(tf)) {
-		tf->rax = -EPERM;
+	if (!syscall_allow(tf))
 		return;
-	}
 
 	syscall_do(tf);
 }
