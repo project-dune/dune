@@ -149,7 +149,7 @@ static void http_bench(void)
 	if (connect(s, (struct sockaddr*) &s_in, sizeof(s_in)) == -1)
 		err(1, "connect()");
 
-	snprintf(buf, sizeof(buf), "GET / HTTP/1.0\n");
+	snprintf(buf, sizeof(buf), "GET / HTTP/1.0\r\n\r\n");
 
 	if (write(s, buf, strlen(buf)) != strlen(buf))
 		err(1, "write()");

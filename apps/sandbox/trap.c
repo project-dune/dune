@@ -15,6 +15,12 @@
 #include <sys/uio.h>
 #include <utime.h>
 
+#include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/vfs.h>
+
 #include "sandbox.h"
 #include "boxer.h"
 
@@ -88,6 +94,21 @@ void boxer_register_syscall_monitor(boxer_syscall_cb cb)
 	_syscall_monitor = cb;
 }
 
+static int check_iovec(struct iovec *iov, int num)
+{
+	if (check_extent(iov, sizeof(*iov) * num))
+		return -EFAULT;
+
+	while (num--) {
+		if (check_extent(iov->iov_base, iov->iov_len))
+			return -EFAULT;
+
+		iov++;
+	}
+
+	return 0;
+}
+
 static int syscall_check_params(struct dune_tf *tf)
 {
 	void *ptr = NULL;
@@ -113,10 +134,20 @@ static int syscall_check_params(struct dune_tf *tf)
 		str = (char*) ARG0(tf);
 		break;
 
+	case SYS_openat:
+		str = (char*) ARG1(tf);
+		break;
+
+	case SYS_getdents:
 	case SYS_read:
 	case SYS_write:
 		ptr = (void*) ARG1(tf);
 		len = ARG2(tf);
+		break;
+
+	case SYS_writev:
+	case SYS_readv:
+		err = check_iovec((struct iovec*) ARG1(tf), ARG2(tf));
 		break;
 
 	case SYS_stat:
@@ -125,6 +156,72 @@ static int syscall_check_params(struct dune_tf *tf)
 	case SYS_fstat:
 		ptr = (void*) ARG1(tf);
 		len = sizeof(struct stat);
+		break;
+
+	case SYS_statfs:
+		str = (char*) ARG0(tf);
+		ptr = (void*) ARG1(tf);
+		len = sizeof(struct statfs);
+		break;
+
+	case SYS_time:
+		ptr = (void*) ARG0(tf);
+		len = sizeof(time_t);
+		break;
+
+	case SYS_epoll_ctl:
+		ptr = (void*) ARG3(tf);
+		len = sizeof(struct epoll_event);
+		break;
+
+	case SYS_epoll_wait:
+		ptr = (void*) ARG1(tf);
+		len = ARG2(tf) * sizeof(struct epoll_event);
+		break;
+
+	case SYS_setsockopt:
+		ptr = (void*) ARG3(tf);
+		len = ARG4(tf);
+		break;
+
+	case SYS_accept:
+		if (ARG2(tf)) {
+			socklen_t *l = (socklen_t*) ARG2(tf);
+
+			if (check_extent(l, sizeof(*l)))
+				err = -EFAULT;
+			else {
+				len = *l;
+				ptr = (void*) ARG1(tf);
+				assert(ptr);
+			}
+		}
+		break;
+
+	case SYS_fcntl:
+		switch (ARG1(tf)) {
+		case F_DUPFD:
+		case F_DUPFD_CLOEXEC:
+		case F_GETFD:
+		case F_SETFD:
+		case F_GETFL:
+		case F_SETFL:
+		case F_GETOWN:
+		case F_SETOWN:
+			break;
+
+		default:
+			err = -EFAULT;
+			break;
+		}
+		break;
+
+	case SYS_ioctl:
+		/* XXX unreliable */
+		if (_IOC_DIR(ARG1(tf))) {
+			ptr = (void*) ARG2(tf);
+			len = _IOC_SIZE(ARG1(tf));
+		}
 		break;
 
 	/* XXX - doesn't belong here */
