@@ -134,12 +134,6 @@ static int syscall_check_params(struct dune_tf *tf)
 			return -1;
 		}
 		break;
-
-	/* XXX */
-	case SYS_fcntl:
-		if (ARG1(tf) != F_GETFL)
-			err = -EINVAL;
-		break;
 	}
 
 	if (ptr != NULL && len != 0 && check_extent(ptr, len))
