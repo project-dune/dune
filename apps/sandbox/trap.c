@@ -14,12 +14,14 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <utime.h>
-
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/vfs.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "sandbox.h"
 #include "boxer.h"
@@ -129,6 +131,7 @@ static int syscall_check_params(struct dune_tf *tf)
 		}
 		break;
 
+	case SYS_access:
 	case SYS_open:
 	case SYS_unlink:
 		str = (char*) ARG0(tf);
@@ -141,6 +144,8 @@ static int syscall_check_params(struct dune_tf *tf)
 	case SYS_getdents:
 	case SYS_read:
 	case SYS_write:
+	case SYS_connect:
+	case SYS_bind:
 		ptr = (void*) ARG1(tf);
 		len = ARG2(tf);
 		break;
@@ -224,6 +229,62 @@ static int syscall_check_params(struct dune_tf *tf)
 		}
 		break;
 
+	case SYS_setgroups:
+		ptr = (void*) ARG1(tf);
+		len = sizeof(gid_t) * ARG0(tf);
+		break;
+
+	case SYS_rt_sigaction:
+		ptr = (void*) ARG1(tf);
+		len = sizeof(struct sigaction);
+
+		if (ARG2(tf)) {
+			if (check_extent((void*) ARG2(tf), len)) {
+				tf->rax = -EFAULT;
+				return -1;
+			}
+		}
+		break;
+
+	/* umm_ checks for correctness */
+	case SYS_brk:
+		break;
+
+	case SYS_mprotect:
+	case SYS_munmap:
+	case SYS_mmap:
+//		ptr = (void*) ARG0(tf);
+//		len = ARG1(tf);
+		break;
+
+	case SYS_getcwd:
+		ptr = (void*) ARG0(tf);
+		len = ARG1(tf);
+		break;
+
+	case SYS_getrlimit:
+		ptr = (void*) ARG1(tf);
+		len = sizeof(struct rlimit);
+		break;
+
+	case SYS_sendfile:
+		ptr = (void*) ARG2(tf);
+		len = sizeof(off_t);
+		break;
+
+	case SYS_getuid:
+	case SYS_setuid:
+	case SYS_getgid:
+	case SYS_setgid:
+	case SYS_epoll_create:
+	case SYS_dup2:
+	case SYS_getpid:
+	case SYS_socket:
+	case SYS_shutdown:
+	case SYS_listen:
+	case SYS_lseek:
+		break;
+
 	/* XXX - doesn't belong here */
 	case SYS_close:
 		if (ARG0(tf) < 3) {
@@ -231,6 +292,19 @@ static int syscall_check_params(struct dune_tf *tf)
 			return -1;
 		}
 		break;
+#if 0
+	default:
+		{
+			static FILE *_out;
+
+			if (!_out)
+				_out = fopen("/tmp/syscall.log", "w");
+
+			fprintf(_out, "Syscall %d\n", tf->rax);
+			fflush(_out);
+		}
+		break;
+#endif
 	}
 
 	if (ptr != NULL && len != 0 && check_extent(ptr, len))
