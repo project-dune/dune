@@ -145,7 +145,7 @@ unsigned long umm_map_big(size_t len, int prot)
 	size_t full_len;
 	void *addr;
 
-	printf("setting up a big page mapping of len %lx\n", len);
+//	printf("setting up a big page mapping of len %lx\n", len);
 
 	full_len = BIG_PGADDR(len + BIG_PGSIZE - 1) +
 		   BIG_PGOFF(umm_get_map_pos());
