@@ -58,7 +58,7 @@ static int check_extent(const void *ptr, size_t len)
 	return 0;
 }
 
-static int check_string(const void *ptr)
+int check_string(const void *ptr)
 {
 	void *pos;
 	size_t maxlen;

@@ -27,10 +27,10 @@ static int process_elf_ph(struct dune_elf *elf, Elf64_Phdr *phdr)
 
 	if (phdr->p_type != PT_LOAD)
 		return 0; // continue to next section
-
+#if 0
 	printf("sandbox: loading segment - va 0x%09lx, len %lx\n",
 	       phdr->p_vaddr, phdr->p_memsz);
-
+#endif
 	if (elf->hdr.e_type == ET_DYN)
 		off = LOADER_VADDR_OFF;
 	else
@@ -279,7 +279,10 @@ int boxer_main(int argc, char *argv[])
 	if (argc < 2)
 		return -EINVAL;
 
-	printf("%s\n", environ[0]);
+	/* XXX needed.  Probably does some libc stuff */
+	printf(" \b"); 
+
+//	printf("%s\n", environ[0]);
 
 	ret = dune_init(0);
 	if (ret) {
@@ -297,7 +300,7 @@ int boxer_main(int argc, char *argv[])
 	if (ret)
 		return ret;
 
-	printf("sandbox: entry addr is %lx\n", data.entry);
+//	printf("sandbox: entry addr is %lx\n", data.entry);
 
 	dune_set_user_fs(0); // default starting fs
 

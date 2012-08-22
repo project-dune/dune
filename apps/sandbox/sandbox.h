@@ -42,6 +42,8 @@ static inline bool mem_ref_is_safe(const void *ptr, size_t len)
 	return false;
 }
 
+extern int check_string(const void *ptr);
+
 extern int elf_load(const char *path);
 
 extern unsigned long umm_brk(unsigned long brk);
