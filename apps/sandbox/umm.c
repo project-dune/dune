@@ -121,7 +121,7 @@ unsigned long umm_brk(unsigned long brk)
 	if (len == brk_len) {
 		return brk;
 	} else if (len < brk_len) {
-		printf("freeing heap %lx\n", brk_len - len);
+//		printf("freeing heap %lx\n", brk_len - len);
 		ret = munmap((void *) (mmap_base + len), brk_len - len);
 		if (ret)
 			return -errno;
