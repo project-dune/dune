@@ -137,6 +137,7 @@ static void http_bench(void)
 	int s;
 	struct sockaddr_in s_in;
 	char buf[1024];
+	char *ip = getenv("BENCH_IP");
 
 	if ((s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1)
 		err(1, "socket()");
@@ -144,7 +145,7 @@ static void http_bench(void)
 	memset(&s_in, 0, sizeof(s_in));
 	s_in.sin_family      = PF_INET;
 	s_in.sin_port        = htons(80);
-	s_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+	s_in.sin_addr.s_addr = inet_addr(ip ? ip : "127.0.0.1");
 
 	if (connect(s, (struct sockaddr*) &s_in, sizeof(s_in)) == -1)
 		err(1, "connect()");
