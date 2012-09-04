@@ -2,15 +2,13 @@
 #include <sys/mman.h>
 
 #include "libdune/dune.h"
+#include "bench.h"
 
-#define N		1000
-#define NRPGS		100
 #define MAP_ADDR	0x400000000000
 
 static char *mem;
-unsigned long trap_tsc;
+unsigned long trap_tsc, overhead;
 unsigned long time = 0;
-
 static void prime_memory(void)
 {
 	int i;
@@ -26,7 +24,7 @@ benchmark1_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 	ptent_t *pte;
 	int accessed;
 
-	time += dune_get_ticks() - trap_tsc;
+	time += rdtscllp() - trap_tsc;
 
 	dune_vm_lookup(pgroot, (void *) addr, 0, &pte);
 	*pte |= PTE_P | PTE_W | PTE_U | PTE_A | PTE_D;
@@ -68,10 +66,13 @@ static void benchmark2(void)
 	}
 }
 
-void benchmark_syscall(void)
+static void benchmark_syscall(void)
 {
 	int i;
-	unsigned long ticks = dune_get_ticks();
+	unsigned long ticks;
+
+	synch_tsc();
+	ticks = dune_get_ticks();
 
 	for (i = 0; i < N; i++) {
 		int ret;
@@ -82,28 +83,75 @@ void benchmark_syscall(void)
 		"=r" (ret) :: "rax");
 	}
 
-	dune_printf("System call took %ld cycles\n", (dune_get_ticks() - ticks) / N);
+	dune_printf("System call took %ld cycles\n", (rdtscllp() - ticks - overhead) / N);
 }
 
-void benchmark_fault(void)
+static void benchmark_fault(void)
 {
 	int i;
 	unsigned long ticks;
 	char *fm = dune_mmap(NULL, N * PGSIZE, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
+	synch_tsc();
 	ticks = dune_get_ticks();
 	for (i = 0; i < N; i++) {
 		fm[i * PGSIZE] = i;
 	}
 
-	dune_printf("Kernel fault took %ld cycles\n", (dune_get_ticks() - ticks) / N);
+	dune_printf("Kernel fault took %ld cycles\n", (rdtscllp() - ticks - overhead) / N);
+}
+
+static void benchmark_appel1(void)
+{
+	int i;
+	unsigned long tsc, avg_appel1 = 0, avg_user_fault = 0;
+
+	dune_register_pgflt_handler(benchmark1_handler);
+
+	for (i = 0; i < N; i++) {
+		dune_vm_mprotect(pgroot, (void *) MAP_ADDR, PGSIZE * NRPGS, PERM_R);
+
+		synch_tsc();
+		time = 0;
+		tsc = dune_get_ticks();
+		benchmark1();
+
+		avg_appel1 += rdtscllp() - tsc - overhead;
+		avg_user_fault += (time - overhead * NRPGS) / NRPGS;
+	}
+
+	dune_printf("User fault took %ld cycles\n", avg_user_fault / N);
+	dune_printf("PROT1,TRAP,UNPROT took %ld cycles\n", avg_appel1 / N);
+}
+
+static void benchmark_appel2(void)
+{
+	int i;
+	unsigned long tsc, avg = 0;
+
+	dune_register_pgflt_handler(benchmark2_handler);
+
+	for (i = 0; i < N; i++) {
+		dune_vm_mprotect(pgroot, (void *) MAP_ADDR,
+				 PGSIZE * NRPGS * 2, PERM_R | PERM_W);
+		prime_memory();
+
+		synch_tsc();
+		tsc = dune_get_ticks();
+		benchmark2();
+		avg += rdtscllp() - tsc - overhead;
+	}
+
+	dune_printf("PROTN,TRAP,UNPROT took %ld cycles\n", avg / N);
 }
 
 int main(int argc, char *argv[])
 {
 	int ret;
-	unsigned long tsc;
+
+	overhead = measure_tsc_overhead();
+	printf("TSC overhead is %ld\n", overhead);
 
 	ret = dune_init_and_enter();
 	if (ret) {
@@ -126,24 +174,10 @@ int main(int argc, char *argv[])
 	}
 
 	mem = (void *) MAP_ADDR;
-
-	dune_register_pgflt_handler(benchmark1_handler);
-	prime_memory();
-	dune_vm_mprotect(pgroot, (void *) MAP_ADDR, PGSIZE * NRPGS, PERM_R);
-
-	tsc = dune_get_ticks();
-	benchmark1();
-	dune_printf("User fault took %ld cycles\n", time / NRPGS);
-	dune_printf("PROT1,TRAP,UNPROT took %ld cycles\n", dune_get_ticks() - tsc);
-
-	dune_register_pgflt_handler(benchmark2_handler);
-	dune_vm_mprotect(pgroot, (void *) MAP_ADDR,
-                    PGSIZE * NRPGS * 2, PERM_R | PERM_W);
 	prime_memory();
 
-	tsc = dune_get_ticks();
-	benchmark2();
-	dune_printf("PROTN,TRAP,UNPROT took %ld cycles\n", dune_get_ticks() - tsc);
-	
+	benchmark_appel1();
+	benchmark_appel2();
+
 	return 0;
 }
