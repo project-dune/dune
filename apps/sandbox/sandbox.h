@@ -52,6 +52,7 @@ umm_mmap(void *addr, size_t length, int prot,
 	 int flags, int fd, off_t offset);
 extern int umm_munmap(void *addr, size_t len);
 extern int umm_mprotect(void *addr, size_t len, unsigned long prot);
+extern void *umm_shmat(int shmid, void *addr, int shmflg);
 extern int umm_alloc_stack(uintptr_t *stack_top);
 
 extern int trap_init(void);

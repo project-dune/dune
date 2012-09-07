@@ -372,6 +372,11 @@ static void syscall_do(struct dune_tf *tf)
 		tf->rax = umm_munmap((void *) ARG0(tf), (size_t) ARG1(tf)); 
 		break;
 
+	case SYS_shmat:
+		tf->rax = (unsigned long) umm_shmat((int) ARG0(tf),
+				(void*) ARG1(tf), (int) ARG2(tf));
+		break;
+
 	case SYS_exit_group:
 	case SYS_exit:
 		dune_ret_from_user(ARG0(tf));

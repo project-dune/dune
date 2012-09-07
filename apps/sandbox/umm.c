@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <sys/mman.h>
+#include <sys/shm.h>
 
 #include "sandbox.h"
 
@@ -234,6 +235,52 @@ int umm_mprotect(void *addr, size_t len, unsigned long prot)
 	assert(!ret);
 
 	return 0;
+}
+
+void *umm_shmat(int shmid, void *addr, int shmflg)
+{
+	struct shmid_ds shm;
+	unsigned long len;
+	void *mem;
+	int ret;
+	int perm;
+	int prot = PROT_READ;
+	int adjust_mmap_len = 0;
+
+	if (!(shmflg & SHM_RDONLY))
+		prot |= PROT_WRITE;
+
+	perm = prot_to_perm(prot);
+
+	if (shmctl(shmid, IPC_STAT, &shm) == -1)
+		return (void*) -1;
+
+	len = shm.shm_segsz;
+
+	if (!addr) {
+		if (!umm_space_left(len))
+			return (void*) -ENOMEM;
+		adjust_mmap_len = 1;
+		addr = (void *) umm_get_map_pos() - PGADDR(len + PGSIZE - 1);	
+	} else if (!mem_ref_is_safe(addr, len))
+		return (void*) -EINVAL;
+
+	mem = shmat(shmid, addr, shmflg);
+	if (mem != addr)
+		return (void*) (long) -errno;
+
+	ret = dune_vm_map_phys(pgroot, addr, len,
+			      (void *) dune_va_to_pa(addr),
+			      perm);
+	if (ret) {
+		shmdt(addr);
+		return (void*) (long) ret;
+	}
+
+	if (adjust_mmap_len)
+		mmap_len +=  PGADDR(len + PGSIZE - 1);
+
+	return addr;
 }
 
 int umm_alloc_stack(uintptr_t *stack_top)
