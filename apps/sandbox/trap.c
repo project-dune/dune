@@ -100,12 +100,22 @@ void boxer_register_syscall_monitor(boxer_syscall_cb cb)
 
 void thread_entry(void* (*cb)(void*), void *arg)
 {
-//	dune_enter();
+	unsigned long rc;
+        struct dune_tf tf;
+	unsigned long sp;
 
-	cb(arg);
+	dune_enter();
 
-	printf("Thread exit safety net\n");
-	syscall(SYS_exit, 666);
+	asm volatile("mov %%rsp, %0" : "=a" (sp));
+
+        memset(&tf, 0, sizeof(struct dune_tf));
+        tf.rip = (unsigned long) cb;
+        tf.rsp = sp - PGSIZE;
+	tf.rdi = (unsigned long) arg;
+
+        rc = dune_jump_to_user(&tf);
+
+	syscall(SYS_exit, rc);
 }
 
 static long dune_clone(unsigned long clone_flags, unsigned long newsp,

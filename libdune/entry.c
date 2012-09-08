@@ -67,14 +67,31 @@ void dune_set_user_fs(unsigned long fs_base)
 	     [ufs_base]"i"(offsetof(struct dune_percpu, ufs_base)));
 }
 
+static void map_ptr(void *p, int len)
+{
+	unsigned long page = PGADDR(p);
+	unsigned long page_end = PGADDR((char*) p + len);
+	unsigned long l = (page_end - page) + PGSIZE;
+	void *pg = (void*) page;
+
+	dune_vm_map_phys(pgroot, pg, l, (void*) dune_va_to_pa(pg),
+			 PERM_R | PERM_W);
+}
+
 static int setup_safe_stack(struct dune_percpu *percpu)
 {
 	int i;
-	char *safe_stack = memalign(PGSIZE, PGSIZE);
-	if (!safe_stack)
-		return -ENOMEM;
-	safe_stack += PGSIZE;
+	char *safe_stack;
 
+	safe_stack = dune_mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
+			       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+	if (safe_stack == MAP_FAILED)
+		return -ENOMEM;
+
+	map_ptr(safe_stack, PGSIZE);
+
+	safe_stack += PGSIZE;
 	percpu->tss.tss_iomb = offsetof(struct Tss, tss_iopb);
 
 	for (i = 1; i < 8; i++)
@@ -344,9 +361,12 @@ int dune_enter(void)
 		return -errno;
 	}
 
-	percpu = malloc(sizeof(struct dune_percpu));
-	if (!percpu)
+	percpu = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
+		      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (percpu == MAP_FAILED)
 		return -ENOMEM;
+
+	map_ptr(percpu, sizeof(*percpu));
 
 	percpu->kfs_base = arch_fs;
 	percpu->ufs_base = arch_fs;
