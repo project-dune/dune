@@ -22,6 +22,8 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sched.h>
+#include <linux/sched.h>
 
 #include "sandbox.h"
 #include "boxer.h"
@@ -94,6 +96,49 @@ static inline long get_err(long ret)
 void boxer_register_syscall_monitor(boxer_syscall_cb cb)
 {
 	_syscall_monitor = cb;
+}
+
+void thread_entry(void* (*cb)(void*), void *arg)
+{
+//	dune_enter();
+
+	cb(arg);
+
+	printf("Thread exit safety net\n");
+	syscall(SYS_exit, 666);
+}
+
+static long dune_clone(unsigned long clone_flags, unsigned long newsp,
+		       void *parent_tid, void *child_tid, void *regs)
+{
+	long rc;
+
+        asm volatile("movq %2, %%rdi \n\t"
+                     "movq %3, %%rsi \n\t"
+                     "movq %4, %%rdx \n\t"
+                     "movq %5, %%r10 \n\t"
+                     "movq %6, %%r8 \n\t"
+                     "vmcall \n\t"
+		     "testq %%rax,%%rax\n\t"
+		     "jz _thread_start\n\t"
+                     "movq %%rax, %0 \n\t" 
+		     "jmp _out\n\t"
+		     "_thread_start:\n\t"
+		     "xor     %%rbp, %%rbp\n\t"
+		     "popq    %%rdi\n\t" /* func */
+		     "popq    %%rsi\n\t" /* arg */
+		     "call thread_entry\n\t"
+		     "_out:\n\t"
+		     : "=a" (rc) 
+                     : "a" (SYS_clone), "r" (clone_flags), "r" (newsp),
+                     "r" (parent_tid), "r" (child_tid), "r" (regs)
+                     : "rdi", "rsi", "rdx", "r10",                                               
+                     "r8", "r9", "memory");
+
+	if (rc < 0)
+		return rc;
+
+	return rc;
 }
 
 static int check_iovec(struct iovec *iov, int num)
@@ -375,6 +420,11 @@ static void syscall_do(struct dune_tf *tf)
 	case SYS_shmat:
 		tf->rax = (unsigned long) umm_shmat((int) ARG0(tf),
 				(void*) ARG1(tf), (int) ARG2(tf));
+		break;
+
+	case SYS_clone:
+		tf->rax = dune_clone(ARG0(tf), ARG1(tf), (void*) ARG2(tf),
+				     (void*) ARG3(tf), (void*) ARG4(tf));
 		break;
 
 	case SYS_exit_group:
