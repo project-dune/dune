@@ -433,12 +433,6 @@ static int syscall_check_params(struct dune_tf *tf)
 	return 0;
 }
 
-static int dune_sigaction(int signum, struct sigaction *act,
-			  struct sigaction *old)
-{
-	return 0;
-}
-
 static int syscall_allow(struct dune_tf *tf)
 {
 	if (!_syscall_monitor) {
@@ -499,10 +493,10 @@ static void syscall_do(struct dune_tf *tf)
 		tf->rax = dune_clone(tf);
 		break;
 
+	/* ignore signals for now */
 	case SYS_rt_sigaction:
-		tf->rax = dune_sigaction(ARG0(tf),
-					 (struct sigaction*) ARG1(tf),
-					 (struct sigaction*) ARG2(tf));
+	case SYS_rt_sigprocmask:
+		tf->rax = 0;
 		break;
 
 	case SYS_exit_group:
