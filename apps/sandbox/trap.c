@@ -24,6 +24,8 @@
 #include <sys/resource.h>
 #include <sched.h>
 #include <linux/sched.h>
+#include <sys/mman.h>
+#include <stdlib.h>
 
 #include "sandbox.h"
 #include "boxer.h"
@@ -98,32 +100,79 @@ void boxer_register_syscall_monitor(boxer_syscall_cb cb)
 	_syscall_monitor = cb;
 }
 
-void thread_entry(void* (*cb)(void*), void *arg)
+void do_enter_thread(struct dune_tf *tf)
 {
-	unsigned long rc;
-        struct dune_tf tf;
-	unsigned long sp;
+	long rc;
 
-	dune_enter();
-
-	asm volatile("mov %%rsp, %0" : "=a" (sp));
-
-        memset(&tf, 0, sizeof(struct dune_tf));
-        tf.rip = (unsigned long) cb;
-        tf.rsp = PGADDR(sp - PGSIZE);
-	tf.rdi = (unsigned long) arg;
-
-        rc = dune_jump_to_user(&tf);
+	rc = dune_jump_to_user(tf);
 
 	syscall(SYS_exit, rc);
 }
 
-static long dune_clone(unsigned long clone_flags, unsigned long newsp,
-		       void *parent_tid, void *child_tid, void *regs)
+void thread_entry(unsigned long sp, unsigned long rc, struct dune_tf *t)
+{
+	struct dune_tf tf;
+	unsigned char *stack;
+	int stacklen = PGSIZE * 10;
+
+	dune_enter();
+
+	/* fork */
+	if (t->rip == 0)
+		return;
+
+        memset(&tf, 0, sizeof(struct dune_tf));
+        tf.rip = t->rip;
+	tf.rax = rc;
+	tf.rsp = sp;
+
+	stack = dune_mmap(NULL, stacklen, PROT_READ | PROT_WRITE,
+			  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (stack == MAP_FAILED) {
+		dune_printf("Can't alloc stack\n");
+		abort();
+	}
+
+        dune_vm_map_phys(pgroot, stack, stacklen, (void*) dune_va_to_pa(stack),
+	                         PERM_R | PERM_W);
+
+	stack += stacklen;
+
+	asm volatile ("mov %0, %%rdi\n\t"
+		      "mov %1, %%rsp\n\t"
+		      "call do_enter_thread\n\t"
+		      : 
+		      : "r" (&tf), "r" (stack)
+		      );
+
+	abort();
+}
+
+static long dune_clone(struct dune_tf *tf)
 {
 	long rc;
+	void *ptr = NULL;
+	unsigned long sp = ARG1(tf);
+	unsigned long *x;
+	struct dune_tf t;
 
-        asm volatile("movq %2, %%rdi \n\t"
+	if (ARG1(tf) == 0)
+		t.rip = 0; /* fork */
+	else
+		memcpy(&t, tf, sizeof(t)); /* thread */
+
+	ptr = &t;
+
+	if (!sp)
+		asm volatile ("movq %%rsp, %0" : "=a" (sp));
+
+	/* XXX check stack */
+	x = (unsigned long*) (sp - 80);
+	*x = (unsigned long) ptr;
+
+        asm volatile(
+		     "movq %7,-80(%%rsp)\n\t"
+		     "movq %2, %%rdi \n\t"
                      "movq %3, %%rsi \n\t"
                      "movq %4, %%rdx \n\t"
                      "movq %5, %%r10 \n\t"
@@ -134,14 +183,15 @@ static long dune_clone(unsigned long clone_flags, unsigned long newsp,
                      "movq %%rax, %0 \n\t" 
 		     "jmp _out\n\t"
 		     "_thread_start:\n\t"
-		     "xor     %%rbp, %%rbp\n\t"
-		     "popq    %%rdi\n\t" /* func */
-		     "popq    %%rsi\n\t" /* arg */
+		     "movq %%rsp, %%rdi\n\t"
+		     "movq %%rax, %%rsi\n\t"
+		     "movq -80(%%rsp), %%rdx\n\t"
 		     "call thread_entry\n\t"
+		     "movq $0, %0\n\t"
 		     "_out:\n\t"
 		     : "=a" (rc) 
-                     : "a" (SYS_clone), "r" (clone_flags), "r" (newsp),
-                     "r" (parent_tid), "r" (child_tid), "r" (regs)
+                     : "a" (SYS_clone), "r" (ARG0(tf)), "r" (ARG1(tf)),
+                     "r" (ARG2(tf)), "r" (ARG3(tf)), "r" (ARG4(tf)), "r" (ptr)
                      : "rdi", "rsi", "rdx", "r10",                                               
                      "r8", "r9", "memory");
 
@@ -440,8 +490,7 @@ static void syscall_do(struct dune_tf *tf)
 		break;
 
 	case SYS_clone:
-		tf->rax = dune_clone(ARG0(tf), ARG1(tf), (void*) ARG2(tf),
-				     (void*) ARG3(tf), (void*) ARG4(tf));
+		tf->rax = dune_clone(tf);
 		break;
 
 	case SYS_exit_group:

@@ -27,7 +27,7 @@
 ptent_t *pgroot;
 uintptr_t mmap_base;
 uintptr_t stack_base;
-unsigned long fs_base;
+static struct dune_percpu *_percpu;
 
 static int dune_fd;
 
@@ -84,8 +84,8 @@ static int setup_safe_stack(struct dune_percpu *percpu)
 	int i;
 	char *safe_stack;
 
-	safe_stack = dune_mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
-			       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	safe_stack = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
 	if (safe_stack == MAP_FAILED)
 		return -ENOMEM;
@@ -162,11 +162,6 @@ static void __dune_boot(struct dune_percpu *percpu)
  */
 static int dune_boot(struct dune_percpu *percpu)
 {
-	int ret;
-
-	if ((ret = setup_safe_stack(percpu)))
-		return ret;
-
 	setup_gdt(percpu);
 	__dune_boot(percpu);
 
@@ -342,6 +337,44 @@ static int setup_mappings(bool full)
 	return ret;
 }
 
+struct dune_percpu *setup_percpu(void)
+{
+	struct dune_percpu *percpu;
+	int ret;
+	unsigned long fs_base;
+
+	if (arch_prctl(ARCH_GET_FS, &fs_base) == -1) {
+		printf("dune: failed to get FS register\n");
+		return NULL;
+	}
+
+	percpu = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
+		      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (percpu == MAP_FAILED)
+		return NULL;
+
+	map_ptr(percpu, sizeof(*percpu));
+
+	percpu->kfs_base = fs_base;
+	percpu->ufs_base = fs_base;
+	percpu->in_usermode = 0;
+
+	if ((ret = setup_safe_stack(percpu))) {
+		munmap(percpu, PGSIZE);
+		return NULL;
+	}
+
+	setup_gdt(percpu);
+
+	return percpu;
+}
+
+static void free_percpu(struct dune_percpu *percpu)
+{
+	/* XXX free stack */
+	munmap(percpu, PGSIZE);
+}
+
 /**
  * dune_enter - transitions a process to "Dune mode"
  * 
@@ -352,35 +385,22 @@ static int setup_mappings(bool full)
  */
 int dune_enter(void)
 {
-	struct dune_percpu *percpu;
+	struct dune_percpu *percpu = NULL;
 	struct dune_config conf;
 	uint64_t arch_fs;
 	int ret;
+	int frk = 0;
 
 	if (arch_prctl(ARCH_GET_FS, &arch_fs) == -1) {
 		printf("dune: failed to get FS register\n");
 		return -errno;
 	}
 
-	percpu = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
-		      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (percpu == MAP_FAILED)
-		return -ENOMEM;
-
-	map_ptr(percpu, sizeof(*percpu));
-
-	percpu->kfs_base = fs_base;
-	percpu->ufs_base = arch_fs;
-	percpu->in_usermode = 0;
-
-#if 0
-	// NOTE: early versions of Dune required memory locking
-	if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
-		printf("dune: failed to lock memory\n");
-		ret = -EIO;
-		goto fail_enter;
-	}
-#endif
+	if (arch_fs == _percpu->kfs_base) {
+		frk    = 1;
+		percpu = _percpu;
+	} else
+		percpu = setup_percpu();
 
 	conf.rip = (__u64) &__dune_ret;
 	conf.rsp = 0;
@@ -401,7 +421,8 @@ int dune_enter(void)
 	return 0;
 
 fail_enter:
-	free(percpu);
+	if (!frk)
+		free_percpu(percpu);
 	return ret;
 }
 
@@ -423,11 +444,6 @@ fail_enter:
 int dune_init(bool map_full)
 {
 	int ret, i;
-
-	if (arch_prctl(ARCH_GET_FS, &fs_base) == -1) {
-		printf("dune: failed to get FS register\n");
-		return -errno;
-	}
 
 	dune_fd = open("/dev/dune", O_RDWR);
 	if (dune_fd <= 0) {
@@ -478,7 +494,12 @@ int dune_init(bool map_full)
 	}
 
 	setup_idt();
-	
+
+	if (!(_percpu = setup_percpu())) {
+		ret = -1;
+		goto err;
+	}
+
 	return 0;
 
 err:
