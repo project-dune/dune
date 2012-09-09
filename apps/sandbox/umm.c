@@ -74,14 +74,14 @@ static int umm_mmap_anom(void *addr, size_t len, int prot, bool big)
 	return 0;
 }
 
-static int umm_mmap_file(void *addr, size_t len, int prot,
+static int umm_mmap_file(void *addr, size_t len, int prot, int flags,
 			 int fd, off_t offset)
 {
 	int ret;
 	void *mem;
 
 	mem = mmap(addr, len, prot,
-		   MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
+		   MAP_FIXED | flags,
 		   fd, offset);
 	if (mem != addr)
 		return -errno;
@@ -184,7 +184,7 @@ unsigned long umm_mmap(void *addr, size_t len, int prot,
 		if (ret)
 			return ret;
 	} else if (fd > 0) {
-		ret = umm_mmap_file(addr, len, prot, fd, offset);
+		ret = umm_mmap_file(addr, len, prot, flags, fd, offset);
 		if (ret)
 			return ret;
 	} else

@@ -72,6 +72,28 @@ static void dune_dump_stack(struct dune_tf *tf)
 	}
 }
 
+static void dune_hexdump(void *x, int len)
+{
+	unsigned char *p = x;
+
+	while (len--)
+		dune_printf("%.2x ", *p++);
+
+	dune_printf("\n");
+}
+
+static void dump_ip(struct dune_tf *tf)
+{
+	unsigned char *p = (void*) tf->rip;
+	int len = 20;
+
+	dune_printf("dune: code before IP\t");
+	dune_hexdump(p - len, len);
+
+	dune_printf("dune: code at IP\t");
+	dune_hexdump(p, len);
+}
+
 void dune_dump_trap_frame(struct dune_tf *tf)
 {
 	// we use dune_printf() because this might
@@ -89,6 +111,7 @@ void dune_dump_trap_frame(struct dune_tf *tf)
 	dune_printf("dune: R12 0x%016lx R13 0x%016lx\n", tf->r12, tf->r13);
 	dune_printf("dune: R14 0x%016lx R15 0x%016lx\n", tf->r14, tf->r15);
 	dune_dump_stack(tf);
+	dump_ip(tf);
 	dune_printf("dune: --- End Trap Dump ---\n");
 }
 

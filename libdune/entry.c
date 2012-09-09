@@ -27,6 +27,7 @@
 ptent_t *pgroot;
 uintptr_t mmap_base;
 uintptr_t stack_base;
+unsigned long fs_base;
 
 static int dune_fd;
 
@@ -368,7 +369,7 @@ int dune_enter(void)
 
 	map_ptr(percpu, sizeof(*percpu));
 
-	percpu->kfs_base = arch_fs;
+	percpu->kfs_base = fs_base;
 	percpu->ufs_base = arch_fs;
 	percpu->in_usermode = 0;
 
@@ -422,6 +423,11 @@ fail_enter:
 int dune_init(bool map_full)
 {
 	int ret, i;
+
+	if (arch_prctl(ARCH_GET_FS, &fs_base) == -1) {
+		printf("dune: failed to get FS register\n");
+		return -errno;
+	}
 
 	dune_fd = open("/dev/dune", O_RDWR);
 	if (dune_fd <= 0) {

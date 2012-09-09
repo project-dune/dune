@@ -110,7 +110,7 @@ void thread_entry(void* (*cb)(void*), void *arg)
 
         memset(&tf, 0, sizeof(struct dune_tf));
         tf.rip = (unsigned long) cb;
-        tf.rsp = sp - PGSIZE;
+        tf.rsp = PGADDR(sp - PGSIZE);
 	tf.rdi = (unsigned long) arg;
 
         rc = dune_jump_to_user(&tf);
@@ -268,6 +268,13 @@ static int syscall_check_params(struct dune_tf *tf)
 		case F_SETFL:
 		case F_GETOWN:
 		case F_SETOWN:
+			break;
+
+		case F_SETLKW:
+		case F_GETLK:
+		case F_SETLK:
+			ptr = (void*) ARG2(tf);
+			len = sizeof(struct flock);
 			break;
 
 		default:
