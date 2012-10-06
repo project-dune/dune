@@ -2,6 +2,7 @@
  * dune.S - assembly helper routines (e.g. system calls, interrupts, traps)
  */
 
+#define USE_RDWRGSFS 0
 
 #define MSR_FS_BASE	0xc0000100
 #define GD_KT		0x10
@@ -196,10 +197,14 @@ __dune_enter:
 	movq	%gs:UFS_BASE, %rdx
 	cmp	%rax, %rdx
 	je	1f
+#if USE_RDWRGSFS
+	wrfsbase %rax
+#else
 	movq	%rax, %rdx
 	shrq	$32, %rdx
 	movl	$MSR_FS_BASE, %ecx
 	wrmsr
+#endif /* USE_RDWRGSFS */
 1:
 	.endm
 
@@ -214,10 +219,14 @@ __dune_enter:
 	movq	%gs:KFS_BASE, %rdx
 	cmp	%rax, %rdx
 	je	1f
+#if USE_RDWRGSFS
+	wrfsbase %rax
+#else
 	movq	%rax, %rdx
 	shrq	$32, %rdx
 	movl	$MSR_FS_BASE, %ecx
 	wrmsr
+#endif /* USE_RDWRGSFS */
 1:
 	.endm
 
