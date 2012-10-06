@@ -9,12 +9,14 @@ is available here:
 
 	http://dune.scs.stanford.edu/
 
-Dune has three components:
+Dune has two components:
 
 1.  A kernel module to enable virtualization (kern)
-2.  A library OS to help with using Dune (libdune)
-3.  A glibc patch for Dune enabled applications (eglibc-2.14).  This does not
-    need to be installed globally.
+2.  A utility library to help with using Dune (libdune)
+
+We also provide an optional patched glibc (eglibc-2.14). It slightly
+improves system call performance by performing a VMCALL directly.
+If used, it does not need to be installed globally.
 
 Dune is enabled only on applications that call dune_init().  All other
 applications on the system remain unaffected.
@@ -43,30 +45,30 @@ Setup
 
 # make
 # insmod kern/dune.ko
-# ./dune_env.sh test/hello
-
-The dune_env.sh script runs Dune applications with the Dune glibc (instead of
-the system's) through LD_PRELOAD.
+# test/hello
 
 You'll need to be root to load the module. However, applications can use
 Dune without running as root; simply change the permission of '/dev/dune'
 accordingly.
 
-The first compile will take some time because it needs to fetch and compile
-glibc, but compilation of Dune is otherwise very fast.
-
 Another program worth trying after Dune is setup is the Dune benchmark suite.
 It can be run with the following command:
 
-# ./dune_env.sh bench/bench_dune
+# bench/bench_dune
+
+Run the following command to build a faster version of glibc (optional):
+
+# make libc
+
+The alternate glibc can be used by prefixing dune apps with the
+dune_env.sh script.
 
 Limitations
 ===========
 
-This is an alpha-level release. The included code is fully usable but missing
-a couple important features. Most notably, it does not include support for signals
-or pthreads. We will make an update available soon to address these missing
-features.
+Dune is fairly far along, but could benefit from better support for signals
+and more robust pthread support inside libdune. We're currently working on
+these issues.
 
 Programming
 ===========
@@ -74,14 +76,12 @@ Programming
 1.  Call dune_init() to enter dune mode.  (Link to libdune.)
 2.  The application will continue to function as normal.  You can use printf,
     use sockets, access files, etc.
-3.  But you can now also perform privileged CPU instructions!
-
-* NOTE: use dune_env.sh to launch processes with the proper glibc version.
+3.  But you can then also perform privileged CPU instructions.
 
 Questions?
 ==========
 
 Contact us at dune@scs.stanford.edu.
 
-Last edited: 06/18/12
+Last edited: 10/05/12
 
