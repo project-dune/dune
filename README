@@ -60,6 +60,11 @@ Run the following command to build a faster version of glibc (optional):
 
 # make libc
 
+If eglibc build fails some systems (e.g. Ubuntu) may have incompatible default
+CFLAGS set.  Before running the libc build set the following flags.
+
+# setenv CFLAGS "-U_FORTIFY_SOURCE -O2 -fno-stack-protector"
+
 The alternate glibc can be used by prefixing dune apps with the
 dune_env.sh script.
 
