@@ -42,7 +42,16 @@ static inline bool mem_ref_is_safe(const void *ptr, size_t len)
 	return false;
 }
 
+extern int check_extent(const void *ptr, size_t len);
 extern int check_string(const void *ptr);
+
+static inline long get_err(long ret)
+{
+	if (ret < 0)
+		return -errno;
+	else
+		return ret;
+}
 
 extern int elf_load(const char *path);
 

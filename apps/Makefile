@@ -1,4 +1,4 @@
-SUBDIRS	= sandbox wedge
+SUBDIRS	= sandbox wedge ufirewall
 
 all: $(SUBDIRS)
 

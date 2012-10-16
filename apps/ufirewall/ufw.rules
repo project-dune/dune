@@ -1,0 +1,8 @@
+allow bind 1234
+allow connect * 171.0.0.0 255.0.0.0
+deny connect 22 0.0.0.0 0.0.0.0
+
+# default rules:
+#
+# deny bind *
+# deny connect * *

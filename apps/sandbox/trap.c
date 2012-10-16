@@ -51,7 +51,7 @@ pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 	}
 }
 
-static int check_extent(const void *ptr, size_t len)
+int check_extent(const void *ptr, size_t len)
 {
 	if (!mem_ref_is_safe(ptr, len)) {
 		printf("sandbox: mem ref with addr %p, len %lx is out of range\n",
@@ -85,14 +85,6 @@ int check_string(const void *ptr)
 fault:
 	printf("str ref addr %p is out of range\n", ptr);
 	return -EFAULT;
-}
-
-static inline long get_err(long ret)
-{
-	if (ret < 0)
-		return -errno;
-	else
-		return ret;
 }
 
 void boxer_register_syscall_monitor(boxer_syscall_cb cb)
