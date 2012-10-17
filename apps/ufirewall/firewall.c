@@ -206,96 +206,59 @@ int firewall_init(void)
 	return 0;
 }
 
-static int sys_socket(int domain, int type, int protocol)
-{
-	return get_err(socket(domain, type, protocol));
-}
-
-static int sys_listen(int sock, int backlog)
-{
-	return get_err(listen(sock, backlog));
-}
-
-static int sys_accept(int sock, struct sockaddr *addr, socklen_t *len)
-{
-	if (check_extent((void *)len, sizeof(socklen_t)))
-		return -EFAULT;
-	
-	if (check_extent((void *)addr, *len))
-		return -EFAULT;
-	
-	return get_err(accept(sock, addr, len));
-}
-
-static int sys_bind(int sock, const struct sockaddr *addr, socklen_t len)
+static int check_bind(int sock, const struct sockaddr *addr, socklen_t len)
 {
 	const struct sockaddr_in *a = (const struct sockaddr_in *)addr;
 
-	if (check_extent((void *)addr, len))
-		return -EFAULT;
-
-	// Only support IPv4
+        // Only support IPv4
 	if (len == sizeof(*a) && a->sin_family == AF_INET) {
 		if (!firewall_check_bind(ntohs(a->sin_port)))
-			return -EADDRNOTAVAIL;
+			return 0;
 	}
 
-	return get_err(bind(sock, addr, len));
+        return 1;
 }
 
-static int sys_connect(int sock, const struct sockaddr *addr, socklen_t len)
+static int check_connect(int sock, const struct sockaddr *addr, socklen_t len)
 {
 	const struct sockaddr_in *a = (const struct sockaddr_in *)addr;
 
-	if (check_extent((void *)addr, len))
-		return -EFAULT;
-
-	// Only support IPv4
+        // Only support IPv4
 	if (len == sizeof(*a) && a->sin_family == AF_INET) {
 		if (!firewall_check_connect(ntohs(a->sin_port),
 					    a->sin_addr.s_addr))
 		{
-			return -ECONNREFUSED;
+			return 0;
 		}
 	}
 
-	return get_err(connect(sock, addr, len));
+	return 1;
 }
 
 static int syscall_monitor(struct dune_tf *tf)
 {
 	switch (tf->rax) {
-	case __NR_socket:
-		tf->rax = sys_socket((int) ARG0(tf),
-				     (int) ARG1(tf),
-				     (int) ARG2(tf));
-		break;
-
-	case __NR_listen:
-		tf->rax = sys_listen((int) ARG0(tf), (int) ARG1(tf));
-		break;
-
-	case __NR_accept:
-		tf->rax = sys_accept((int) ARG0(tf),
-				     (struct sockaddr *) ARG1(tf),
-				     (socklen_t *) ARG2(tf));
-		break;
-
 	case __NR_bind:
-		tf->rax = sys_bind((int) ARG0(tf),
-				   (const struct sockaddr *) ARG1(tf),
-				   (socklen_t) ARG2(tf));
-		break;
+        {
+		int status = check_bind((int) ARG0(tf),
+				        (const struct sockaddr *) ARG1(tf),
+				        (socklen_t) ARG2(tf));
+                if (!status)
+                    tf->rax = -EPERM;
+                return status;
+        }
 	case __NR_connect:
-		tf->rax = sys_connect((int) ARG0(tf),
-				      (const struct sockaddr *) ARG1(tf),
-				      (socklen_t) ARG2(tf));
-		break;
+        {
+		int status = check_connect((int) ARG0(tf),
+				           (const struct sockaddr *) ARG1(tf),
+				           (socklen_t) ARG2(tf));
+                if (!status)
+                    tf->rax = -EPERM;
+                return status;
+        }
 	default:
 		return 1;
 	}
-
-	return 0;
 }
 
 int main(int argc, char *argv[])

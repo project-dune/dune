@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 	}
 	printf("succeeded\n");
 
-	printf("connect to market.scs.stanford.edu(171.66.3.10):80: ");
+	printf("connect to market.scs.stanford.edu(171.66.3.10):22: ");
 	if (test_connect("171.66.3.10", 22) == 0) {
 		printf("succeeded!\n");
 		return 1;
