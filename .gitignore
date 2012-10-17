@@ -1,0 +1,8 @@
+*.o
+*.d
+*.a
+*.swp
+*.hi
+*.cmd
+*.out
+dist
