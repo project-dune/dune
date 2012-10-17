@@ -2,6 +2,7 @@
  * sandbox.h - the main local header
  */
 
+#include <errno.h>
 #include <sys/types.h>
 #include <stdint.h>
 
