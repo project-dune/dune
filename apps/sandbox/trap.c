@@ -30,6 +30,8 @@
 #include "sandbox.h"
 #include "boxer.h"
 
+int exec_execev(const char *filename, char *const argv[], char *const envp[]);
+
 static boxer_syscall_cb _syscall_monitor;
 
 static void
@@ -396,7 +398,21 @@ static int syscall_check_params(struct dune_tf *tf)
 			return -1;
 		}
 		break;
-#if 0
+
+	case SYS_execve:
+	{
+                char *p = ARG0(tf);
+                
+                if (check_string(p)) {
+                        err = -EFAULT;
+                        break;
+                }
+
+                // XXX: Check arrays
+
+		break;
+	}
+
 	default:
 		{
 			static FILE *_out;
@@ -408,7 +424,6 @@ static int syscall_check_params(struct dune_tf *tf)
 			fflush(_out);
 		}
 		break;
-#endif
 	}
 
 	if (ptr != NULL && len != 0 && check_extent(ptr, len))
@@ -484,6 +499,13 @@ static void syscall_do(struct dune_tf *tf)
 	case SYS_clone:
 		tf->rax = dune_clone(tf);
 		break;
+
+        case SYS_execve:
+                tf->rax = exec_execev((const char *)ARG0(tf),
+                                      (char **const)ARG1(tf),
+                                      (char **const)ARG2(tf));
+                break;
+
 
 	/* ignore signals for now */
 	case SYS_rt_sigaction:

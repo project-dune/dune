@@ -51,16 +51,15 @@ exec_execev(const char *filename, char *const argv[], char *const envp[])
     if (page[0] == 0x7f && page[1] == 'E' && page[2] == 'L'&& page[3] == 'F') {
         int i;
         int arglen = getlen(argv);
-        const char **new_argv = (char **)malloc(sizeof(char *)*(arglen+4));
+        const char **new_argv = (char **)malloc(sizeof(char *)*(arglen+3));
 
         printf("ELF!\n");
 
         new_argv[0] = sandbox_path;
         new_argv[1] = ld_path;
-        new_argv[2] = filename;
         for (i = 0; i <= arglen; i++)
-            new_argv[i + 3] = argv[i];
-        new_argv[arglen + 4] = NULL;
+            new_argv[i + 2] = argv[i];
+        new_argv[arglen + 3] = NULL;
 
         for (i = 0; new_argv[i] != NULL; i++)
             printf("'%s' ", new_argv[i]);
