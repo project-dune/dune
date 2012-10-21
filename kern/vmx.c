@@ -56,6 +56,7 @@
 #include <asm/desc.h>
 #include <asm/vmx.h>
 #include <asm/unistd_64.h>
+#include <asm/virtext.h>
 
 #include "dune.h"
 #include "vmx.h"
@@ -1503,6 +1504,11 @@ static void vmx_free_vmxon_areas(void)
 __init int vmx_init(void)
 {
 	int r, cpu;
+	
+	if (!cpu_has_vmx()) {
+		printk(KERN_ERR "vmx: CPU does not support VT-x\n");
+		return -EIO;
+	}
 
 	vmx_init_syscall();
 
