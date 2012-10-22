@@ -414,6 +414,7 @@ static int syscall_check_params(struct dune_tf *tf)
 	}
 
 	default:
+#if 0
 		{
 			static FILE *_out;
 
@@ -423,6 +424,7 @@ static int syscall_check_params(struct dune_tf *tf)
 			fprintf(_out, "Syscall %d\n", tf->rax);
 			fflush(_out);
 		}
+#endif
 		break;
 	}
 
@@ -491,6 +493,12 @@ static void syscall_do(struct dune_tf *tf)
 		tf->rax = umm_munmap((void *) ARG0(tf), (size_t) ARG1(tf)); 
 		break;
 
+	case SYS_mremap:
+		tf->rax = (unsigned long) umm_mremap((void*) ARG0(tf),
+				(size_t) ARG1(tf), (size_t) ARG2(tf),
+				(int) ARG3(tf), (void*) ARG4(tf));
+		break;
+
 	case SYS_shmat:
 		tf->rax = (unsigned long) umm_shmat((int) ARG0(tf),
 				(void*) ARG1(tf), (int) ARG2(tf));
@@ -526,6 +534,8 @@ static void syscall_do(struct dune_tf *tf)
 
 static void syscall_handler(struct dune_tf *tf)
 {
+//	printf("Syscall No. %d\n", tf->rax);
+
 	if (syscall_check_params(tf) == -1)
 		return;
 
