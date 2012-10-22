@@ -189,8 +189,8 @@ static int __dune_vm_mprotect_helper(const void *arg, ptent_t *pte, void *va)
 {
 	ptent_t perm = (ptent_t) arg;
 
-	if (!(PTE_FLAGS(*pte) & PTE_P))
-		return -ENOMEM;
+//	if (!(PTE_FLAGS(*pte) & PTE_P))
+//		return -ENOMEM;
 
 	*pte = PTE_ADDR(*pte) | (PTE_FLAGS(*pte) & PTE_PS) | perm;
 	return 0;
@@ -239,8 +239,8 @@ int dune_vm_map_phys(ptent_t *root, void *va, size_t len, void *pa, int perm)
 	int ret;
 	struct map_phys_data data;
 
-	if (!(perm & PERM_R) && (perm & ~(PERM_R)))
-		return -EINVAL;
+//	if (!(perm & PERM_R) && (perm & ~(PERM_R)))
+//		return -EINVAL;
 
 	data.perm = get_pte_perm(perm);
 	data.va_base = (unsigned long) va;
