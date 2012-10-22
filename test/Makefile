@@ -10,7 +10,7 @@ test: test.o ../libdune/libdune.a
 	$(CC) $(CFLAGS) $(<) -o test -L ../libdune -ldune -lpthread
 
 test_sandbox: test_sandbox.o
-	$(CC) $(CFLAGS) $(<) -lpthread
+	$(CC) $(CFLAGS) -o $(@) $(<) -lpthread
 
 clean:
 	rm -f *.o test *.d hello test test_sandbox
