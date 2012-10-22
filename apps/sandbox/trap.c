@@ -26,6 +26,8 @@
 #include <linux/sched.h>
 #include <sys/mman.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include <err.h>
 
 #include "sandbox.h"
 #include "boxer.h"
@@ -33,6 +35,7 @@
 int exec_execev(const char *filename, char *const argv[], char *const envp[]);
 
 static boxer_syscall_cb _syscall_monitor;
+static pthread_mutex_t _syscall_mtx;
 
 static void
 pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
@@ -452,7 +455,7 @@ static int syscall_allow(struct dune_tf *tf)
 	return _syscall_monitor(tf);
 }
 
-static void syscall_do(struct dune_tf *tf)
+static void syscall_do_foreal(struct dune_tf *tf)
 {
 	switch (tf->rax) {
 	case SYS_arch_prctl:
@@ -532,6 +535,27 @@ static void syscall_do(struct dune_tf *tf)
 	}
 }
 
+static void syscall_do(struct dune_tf *tf)
+{
+	int need_lock = 0;
+
+	switch (tf->rax) {
+	case SYS_mmap:
+	case SYS_mprotect:
+	case SYS_munmap:
+		need_lock = 1;
+		break;
+	}
+
+	if (need_lock && pthread_mutex_lock(&_syscall_mtx))
+		err(1, "pthread_mutex_lock()");
+
+	syscall_do_foreal(tf);
+
+	if (need_lock && pthread_mutex_unlock(&_syscall_mtx))
+		err(1, "pthread_mutex_unlock()");
+}
+
 static void syscall_handler(struct dune_tf *tf)
 {
 //	printf("Syscall No. %d\n", tf->rax);
@@ -547,6 +571,9 @@ static void syscall_handler(struct dune_tf *tf)
 
 int trap_init(void)
 {
+	if (pthread_mutex_init(&_syscall_mtx, NULL))
+		return -1;
+
 	dune_register_pgflt_handler(pgflt_handler);
 	dune_register_syscall_handler(&syscall_handler);
 
