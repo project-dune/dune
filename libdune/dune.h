@@ -310,8 +310,17 @@ extern int dune_elf_load_ph(struct dune_elf *elf, Elf64_Phdr *phdr, off_t off);
 
 // entry routines
 
-extern int dune_enter(void);
+/**
+ * Allocates memory (page tables) for a Dune process.  If will
+ * fork or make threads, you can call this once at the very beginning
+ * of your process and don't call it again.
+ */
 extern int dune_init(bool map_full);
+
+/**
+ * Actually starts the dune process.  This must be done per-thread.
+ */
+extern int dune_enter(void);
 
 /**
  * dune_init_and_enter - initializes libdune and enters "Dune mode"
