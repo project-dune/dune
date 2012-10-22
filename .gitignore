@@ -23,3 +23,4 @@ kern/modules.order
 kern/tmp/
 test/hello
 test/test
+tags
