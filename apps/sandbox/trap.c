@@ -404,7 +404,7 @@ static int syscall_check_params(struct dune_tf *tf)
 
 	case SYS_execve:
 	{
-                char *p = ARG0(tf);
+                char *p = (char*)ARG0(tf);
                 
                 if (check_string(p)) {
                         err = -EFAULT;
