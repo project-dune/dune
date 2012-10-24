@@ -930,6 +930,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vcpu->cpu = -1;
 	vcpu->syscall_tbl = (void *) &dune_syscall_tbl;
 
+	spin_lock_init(&vcpu->ept_lock);
 	if (vmx_create_ept(vcpu))
 		goto fail_ept;
 

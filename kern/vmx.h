@@ -51,6 +51,7 @@ struct vmx_vcpu {
 	int launched;
 
 	struct mmu_notifier mmu_notifier;
+	spinlock_t ept_lock;
 	unsigned long ept_root;
 	unsigned long eptp;
 
