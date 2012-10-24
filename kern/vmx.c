@@ -1026,13 +1026,13 @@ fail_vmcs:
  */
 static void vmx_destroy_vcpu(struct vmx_vcpu *vcpu)
 {
+	vmx_destroy_ept(vcpu);
 	vmx_get_cpu(vcpu);
 	ept_sync_context(vcpu->eptp);
 	if (vcpu->launched)
 		vmcs_clear(vcpu->vmcs);
 	__get_cpu_var(local_vcpu) = NULL;
 	vmx_put_cpu(vcpu);
-	vmx_destroy_ept(vcpu);
 	vmx_free_vpid(vcpu);
 	vmx_free_vmcs(vcpu->vmcs);
 	kfree(vcpu);
