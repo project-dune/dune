@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
+#include <stdlib.h>
 
 #include "sandbox.h"
 
@@ -202,7 +203,7 @@ int umm_munmap(void *addr, size_t len)
 	int ret;
 
 	if (!mem_ref_is_safe(addr, len))
-		return EACCES;
+		return -EACCES;
 
 	ret = munmap(addr, len);
 	if (ret) {
@@ -225,7 +226,7 @@ int umm_mprotect(void *addr, size_t len, unsigned long prot)
 	int ret;
 
 	if (!mem_ref_is_safe(addr, len))
-		return EACCES;
+		return -EACCES;
 
 	ret = mprotect(addr, len, prot);
 	if (ret)
@@ -281,6 +282,50 @@ void *umm_shmat(int shmid, void *addr, int shmflg)
 		mmap_len +=  PGADDR(len + PGSIZE - 1);
 
 	return addr;
+}
+
+void *umm_mremap(void *old_address, size_t old_size, size_t new_size, int flags,
+		 void *new_address)
+{
+	int adjust_mmap_len = 0;
+	void *ret;
+
+	if (!mem_ref_is_safe(old_address, old_size))
+		return (void*) -EACCES;
+
+	if (flags & MREMAP_FIXED) {
+		if (!mem_ref_is_safe(new_address, new_size))
+			return (void*) -EACCES;
+	} else {
+		if (!umm_space_left(new_size))
+			return (void*) -ENOMEM;
+		adjust_mmap_len = 1;
+		new_address = (void *) umm_get_map_pos() - PGADDR(new_size + PGSIZE - 1);	
+	}
+
+	/* XXX add support in future */
+	if (!(flags & MREMAP_MAYMOVE))
+		return (void*) -EINVAL;
+
+	flags |= MREMAP_FIXED | MREMAP_MAYMOVE;
+
+	ret = mremap(old_address, old_size, new_size, flags, new_address);
+	if (ret != new_address)
+		return (void*) (long) -errno;
+
+        if (adjust_mmap_len)
+                mmap_len +=  PGADDR(new_size + PGSIZE - 1);
+
+	dune_vm_unmap(pgroot, old_address, old_size);
+
+        if (dune_vm_map_phys(pgroot, new_address, new_size,
+                              (void *) dune_va_to_pa(new_address),
+                              prot_to_perm(PROT_READ | PROT_WRITE))) {
+		printf("help me!\n");
+		exit(1);
+	}
+
+	return ret;
 }
 
 int umm_alloc_stack(uintptr_t *stack_top)

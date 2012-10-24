@@ -254,7 +254,7 @@ ept_lookup_gpa(struct vmx_vcpu *vcpu, void *gpa, int level,
 			if (!create)
 				return -ENOENT;
 
-			page = (void *) __get_free_page(GFP_KERNEL);
+			page = (void *) __get_free_page(GFP_ATOMIC);
 			if (!page)
 				return -ENOMEM;
 
@@ -457,21 +457,24 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 {
 	int ret;
 	epte_t *epte, flags;
-	struct page *page[1];
+	struct page *page;
 
-	ret = get_user_pages_fast(hva, 1, make_write, page);
+	ret = get_user_pages_fast(hva, 1, make_write, &page);
 	if (ret != 1) {
 		return ret;
 	}
 
+	spin_lock(&vcpu->ept_lock);
+
 	ret = ept_lookup_gpa(vcpu, (void *) gpa,
-			     PageHuge(page[0]) ? 1 : 0, 1, &epte);
+			     PageHuge(page) ? 1 : 0, 1, &epte);
 	if (ret) {
+		spin_unlock(&vcpu->ept_lock);
 		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
 		return ret;
 	}
 
-	if (epte_present(*epte) && (epte_big(*epte) || !PageHuge(page[0])))
+	if (epte_present(*epte) && (epte_big(*epte) || !PageHuge(page)))
 		ept_clear_epte(epte);
 
 	flags = __EPTE_READ | __EPTE_EXEC |
@@ -479,15 +482,17 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 	if (make_write)
 		flags |= __EPTE_WRITE;
 
-	if (PageHuge(page[0])) {
+	if (PageHuge(page)) {
 		flags |= __EPTE_SZ;
 		if (epte_present(*epte) && !epte_big(*epte))
 			free_page(epte_page_vaddr(*epte));
 			/* FIXME: free L0 entries too */
-		*epte = epte_addr(page_to_phys(page[0]) & ~((1 << 21) - 1)) |
+		*epte = epte_addr(page_to_phys(page) & ~((1 << 21) - 1)) |
 			flags;
 	} else
-		*epte = epte_addr(page_to_phys(page[0])) | flags;
+		*epte = epte_addr(page_to_phys(page)) | flags;
+
+	spin_unlock(&vcpu->ept_lock);
 
 	return 0;
 }
@@ -524,11 +529,14 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 		return 0;
 	}
 
+	spin_lock(&vcpu->ept_lock);
 	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 0, &epte);
 	if (ret)
 		return 0;
 
 	ret = ept_clear_epte(epte);
+	spin_unlock(&vcpu->ept_lock);
+
 	if (ret)
 		ept_sync_individual_addr(vcpu->eptp, (gpa_t) gpa);
 
@@ -563,6 +571,7 @@ static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 
 	pr_debug("ept: invalidate_range_start start %lx end %lx\n", start, end);
 
+	spin_lock(&vcpu->ept_lock);
 	while (pos < end) {
 		ret = ept_lookup(vcpu, mm, (void *) pos, 0, 0, &epte);
 		if (!ret) {
@@ -571,6 +580,7 @@ static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 		} else
 			pos += PAGE_SIZE;
 	}
+	spin_unlock(&vcpu->ept_lock);
 
 	ept_sync_context(vcpu->eptp);
 }

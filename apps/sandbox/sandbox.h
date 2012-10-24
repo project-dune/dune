@@ -60,13 +60,14 @@ static inline long get_err(long ret)
 extern int elf_load(const char *path);
 
 extern unsigned long umm_brk(unsigned long brk);
-extern unsigned long
-umm_mmap(void *addr, size_t length, int prot,
-	 int flags, int fd, off_t offset);
+extern unsigned long umm_mmap(void *addr, size_t length, int prot, int flags,
+			      int fd, off_t offset);
 extern int umm_munmap(void *addr, size_t len);
 extern int umm_mprotect(void *addr, size_t len, unsigned long prot);
 extern void *umm_shmat(int shmid, void *addr, int shmflg);
 extern int umm_alloc_stack(uintptr_t *stack_top);
+extern void *umm_mremap(void *old_address, size_t old_size,
+			size_t new_size, int flags, void *new_address);
 
 extern int trap_init(void);
 
