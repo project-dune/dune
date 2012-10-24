@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include <err.h>
 
-#define NUM_THREADS	5
+#define NUM_THREADS	10
 
 static int _threads_survived = 0;
 
