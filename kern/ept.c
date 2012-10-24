@@ -32,8 +32,6 @@
 #define EPT_LEVELS	4	/* 0 through 3 */
 #define HUGE_PAGE_SIZE	2097152
 
-typedef unsigned long gpa_t;
-
 static inline bool cpu_has_vmx_ept_execute_only(void)
 {
 	return vmx_capability.ept & VMX_EPT_EXECUTE_ONLY_BIT;
@@ -62,61 +60,6 @@ static inline bool cpu_has_vmx_ept_1g_page(void)
 static inline bool cpu_has_vmx_ept_4levels(void)
 {
 	return vmx_capability.ept & VMX_EPT_PAGE_WALK_4_BIT;
-}
-
-static inline bool cpu_has_vmx_invept_individual_addr(void)
-{
-	return vmx_capability.ept & VMX_EPT_EXTENT_INDIVIDUAL_BIT;
-}
-
-static inline bool cpu_has_vmx_invept_context(void)
-{
-	return vmx_capability.ept & VMX_EPT_EXTENT_CONTEXT_BIT;
-}
-
-static inline bool cpu_has_vmx_invept_global(void)
-{
-	return vmx_capability.ept & VMX_EPT_EXTENT_GLOBAL_BIT;
-}
-
-static inline void __invept(int ext, u64 eptp, gpa_t gpa)
-{
-	struct {
-		u64 eptp, gpa;
-	} operand = {eptp, gpa};
-
-	asm volatile (ASM_VMX_INVEPT
-			/* CF==1 or ZF==1 --> rc = -1 */
-			"; ja 1f ; ud2 ; 1:\n"
-			: : "a" (&operand), "c" (ext) : "cc", "memory");
-}
-
-static inline void ept_sync_global(void)
-{
-	if (cpu_has_vmx_invept_global())
-		__invept(VMX_EPT_EXTENT_GLOBAL, 0, 0);
-}
-
-static inline void ept_sync_context(u64 eptp)
-{
-	if (cpu_has_vmx_invept_context())
-		__invept(VMX_EPT_EXTENT_CONTEXT, eptp, 0);
-	else
-		ept_sync_global();
-}
-
-static inline void ept_sync_individual_addr(u64 eptp, gpa_t gpa)
-{
-	if (cpu_has_vmx_invept_individual_addr())
-		__invept(VMX_EPT_EXTENT_INDIVIDUAL_ADDR,
-				eptp, gpa);
-	else
-		ept_sync_context(eptp);
-}
-
-void ept_sync_vcpu(struct vmx_vcpu *vcpu)
-{
-	ept_sync_context(vcpu->eptp);
 }
 
 #define VMX_EPT_FAULT_READ	0x01
@@ -510,7 +453,7 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 	ret = ept_set_epte(vcpu, make_write, gpa, hva);
 
 	if (!ret)
-		ept_sync_individual_addr(vcpu->eptp, (gpa_t) gpa);
+		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
 
 	return ret;
 }
@@ -538,7 +481,7 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 	spin_unlock(&vcpu->ept_lock);
 
 	if (ret)
-		ept_sync_individual_addr(vcpu->eptp, (gpa_t) gpa);
+		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
 
 	return ret;
 }
@@ -582,7 +525,7 @@ static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	}
 	spin_unlock(&vcpu->ept_lock);
 
-	ept_sync_context(vcpu->eptp);
+	vmx_ept_sync_vcpu(vcpu);
 }
 
 static void ept_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
@@ -611,7 +554,7 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 
 	ret = ept_set_epte(vcpu, make_write, gpa, address);
 	if (!ret)
-		ept_sync_individual_addr(vcpu->eptp, (gpa_t) gpa);
+		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
 	else
 		printk(KERN_ERR "ept: ept_set_epte failed\n");
 }

@@ -50,7 +50,6 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/percpu.h>
-#include <linux/kvm_types.h>
 #include <linux/syscalls.h>
 
 #include <asm/desc.h>
@@ -117,6 +116,56 @@ static inline bool cpu_has_vmx_ept(void)
 {
 	return vmcs_config.cpu_based_2nd_exec_ctrl &
 		SECONDARY_EXEC_ENABLE_EPT;
+}
+
+static inline bool cpu_has_vmx_invept_individual_addr(void)
+{
+	return vmx_capability.ept & VMX_EPT_EXTENT_INDIVIDUAL_BIT;
+}
+
+static inline bool cpu_has_vmx_invept_context(void)
+{
+	return vmx_capability.ept & VMX_EPT_EXTENT_CONTEXT_BIT;
+}
+
+static inline bool cpu_has_vmx_invept_global(void)
+{
+	return vmx_capability.ept & VMX_EPT_EXTENT_GLOBAL_BIT;
+}
+
+static inline void __invept(int ext, u64 eptp, gpa_t gpa)
+{
+	struct {
+		u64 eptp, gpa;
+	} operand = {eptp, gpa};
+
+	asm volatile (ASM_VMX_INVEPT
+			/* CF==1 or ZF==1 --> rc = -1 */
+			"; ja 1f ; ud2 ; 1:\n"
+			: : "a" (&operand), "c" (ext) : "cc", "memory");
+}
+
+static inline void ept_sync_global(void)
+{
+	if (cpu_has_vmx_invept_global())
+		__invept(VMX_EPT_EXTENT_GLOBAL, 0, 0);
+}
+
+static inline void ept_sync_context(u64 eptp)
+{
+	if (cpu_has_vmx_invept_context())
+		__invept(VMX_EPT_EXTENT_CONTEXT, eptp, 0);
+	else
+		ept_sync_global();
+}
+
+static inline void ept_sync_individual_addr(u64 eptp, gpa_t gpa)
+{
+	if (cpu_has_vmx_invept_individual_addr())
+		__invept(VMX_EPT_EXTENT_INDIVIDUAL_ADDR,
+				eptp, gpa);
+	else
+		ept_sync_context(eptp);
 }
 
 static inline void __vmxon(u64 addr)
@@ -572,7 +621,7 @@ static void __vmx_get_cpu_helper(void *ptr)
 {
 	struct vmx_vcpu *vcpu = ptr;
 
-	ept_sync_vcpu(vcpu);
+	ept_sync_context(vcpu->eptp);
 	vmcs_clear(vcpu->vmcs);
 	if (__get_cpu_var(local_vcpu) == vcpu)
 		__get_cpu_var(local_vcpu) = NULL;
@@ -614,6 +663,26 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 static void vmx_put_cpu(struct vmx_vcpu *vcpu)
 {
 	put_cpu();
+}
+
+/**
+ * vmx_ept_sync_global - used to evict everything in the EPT
+ */
+void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu)
+{
+	vmx_get_cpu(vcpu);
+	ept_sync_context(vcpu->eptp);
+	vmx_put_cpu(vcpu);
+}
+
+/**
+ * vmx_ept_sync_individual_addr - used to evict an individual address
+ */
+void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
+{
+	vmx_get_cpu(vcpu);
+	ept_sync_individual_addr(vcpu->eptp, gpa);
+	vmx_put_cpu(vcpu);
 }
 
 /**
@@ -958,7 +1027,7 @@ fail_vmcs:
 static void vmx_destroy_vcpu(struct vmx_vcpu *vcpu)
 {
 	vmx_get_cpu(vcpu);
-	ept_sync_vcpu(vcpu);
+	ept_sync_context(vcpu->eptp);
 	if (vcpu->launched)
 		vmcs_clear(vcpu->vmcs);
 	__get_cpu_var(local_vcpu) = NULL;
