@@ -2,6 +2,9 @@
  * sandbox.h - the main local header
  */
 
+#ifndef __DUNESB_SANDBOX_H__
+#define __DUNESB_SANDBOX_H__
+
 #include <errno.h>
 #include <sys/types.h>
 #include <stdint.h>
@@ -66,3 +69,6 @@ extern void *umm_shmat(int shmid, void *addr, int shmflg);
 extern int umm_alloc_stack(uintptr_t *stack_top);
 
 extern int trap_init(void);
+
+#endif /* __DUNESB_SANDBOX_H__ */
+
