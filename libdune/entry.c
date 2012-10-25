@@ -355,7 +355,7 @@ struct dune_percpu *setup_percpu(void)
 
 	map_ptr(percpu, sizeof(*percpu));
 
-	percpu->kfs_base = fs_base;
+        percpu->kfs_base = _percpu ? _percpu->kfs_base : fs_base;
 	percpu->ufs_base = fs_base;
 	percpu->in_usermode = 0;
 

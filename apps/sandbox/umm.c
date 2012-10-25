@@ -17,7 +17,7 @@
 
 #include "sandbox.h"
 
-#define USE_BIG_MEM 1
+#define USE_BIG_MEM 0
 
 
 // FIXME: these might need to be made thread safe

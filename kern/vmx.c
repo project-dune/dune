@@ -50,7 +50,6 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/percpu.h>
-#include <linux/kvm_types.h>
 #include <linux/syscalls.h>
 
 #include <asm/desc.h>
@@ -117,6 +116,56 @@ static inline bool cpu_has_vmx_ept(void)
 {
 	return vmcs_config.cpu_based_2nd_exec_ctrl &
 		SECONDARY_EXEC_ENABLE_EPT;
+}
+
+static inline bool cpu_has_vmx_invept_individual_addr(void)
+{
+	return vmx_capability.ept & VMX_EPT_EXTENT_INDIVIDUAL_BIT;
+}
+
+static inline bool cpu_has_vmx_invept_context(void)
+{
+	return vmx_capability.ept & VMX_EPT_EXTENT_CONTEXT_BIT;
+}
+
+static inline bool cpu_has_vmx_invept_global(void)
+{
+	return vmx_capability.ept & VMX_EPT_EXTENT_GLOBAL_BIT;
+}
+
+static inline void __invept(int ext, u64 eptp, gpa_t gpa)
+{
+	struct {
+		u64 eptp, gpa;
+	} operand = {eptp, gpa};
+
+	asm volatile (ASM_VMX_INVEPT
+			/* CF==1 or ZF==1 --> rc = -1 */
+			"; ja 1f ; ud2 ; 1:\n"
+			: : "a" (&operand), "c" (ext) : "cc", "memory");
+}
+
+static inline void ept_sync_global(void)
+{
+	if (cpu_has_vmx_invept_global())
+		__invept(VMX_EPT_EXTENT_GLOBAL, 0, 0);
+}
+
+static inline void ept_sync_context(u64 eptp)
+{
+	if (cpu_has_vmx_invept_context())
+		__invept(VMX_EPT_EXTENT_CONTEXT, eptp, 0);
+	else
+		ept_sync_global();
+}
+
+static inline void ept_sync_individual_addr(u64 eptp, gpa_t gpa)
+{
+	if (cpu_has_vmx_invept_individual_addr())
+		__invept(VMX_EPT_EXTENT_INDIVIDUAL_ADDR,
+				eptp, gpa);
+	else
+		ept_sync_context(eptp);
 }
 
 static inline void __vmxon(u64 addr)
@@ -572,7 +621,8 @@ static void __vmx_get_cpu_helper(void *ptr)
 {
 	struct vmx_vcpu *vcpu = ptr;
 
-	ept_sync_vcpu(vcpu);
+	BUG_ON(raw_smp_processor_id() != vcpu->cpu);
+	ept_sync_context(vcpu->eptp);
 	vmcs_clear(vcpu->vmcs);
 	if (__get_cpu_var(local_vcpu) == vcpu)
 		__get_cpu_var(local_vcpu) = NULL;
@@ -580,9 +630,9 @@ static void __vmx_get_cpu_helper(void *ptr)
 
 /**
  * vmx_get_cpu - called before using a cpu
- * @vcpu: VCPU that willl be loaded.
+ * @vcpu: VCPU that will be loaded.
  *
- * Disables preemption. Call vmx_put_pcpu() when finished.
+ * Disables preemption. Call vmx_put_cpu() when finished.
  */
 static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 {
@@ -602,8 +652,9 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 			vmcs_load(vcpu->vmcs);
 			__vmx_setup_cpu();
 			vcpu->cpu = cur_cpu;
-		} else
+		} else {
 			vmcs_load(vcpu->vmcs);
+		}
 	}
 }
 
@@ -614,6 +665,35 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 static void vmx_put_cpu(struct vmx_vcpu *vcpu)
 {
 	put_cpu();
+}
+
+static void __vmx_sync_helper(void *ptr)
+{
+	struct vmx_vcpu *vcpu = ptr;
+
+	ept_sync_context(vcpu->eptp);
+}
+
+/**
+ * vmx_ept_sync_global - used to evict everything in the EPT
+ * @vcpu: the vcpu
+ */
+void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu)
+{
+	smp_call_function_single(vcpu->cpu,
+		__vmx_sync_helper, (void *) vcpu, 1);
+}
+
+/**
+ * vmx_ept_sync_individual_addr - used to evict an individual address
+ * @vcpu: the vcpu
+ * @gpa: the guest-physical address
+ */
+void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
+{
+	//ept_sync_individual_addr(vcpu->eptp, (gpa & ~(PAGE_SIZE - 1)));
+	smp_call_function_single(vcpu->cpu,
+		__vmx_sync_helper, (void *) vcpu, 1);
 }
 
 /**
@@ -931,7 +1011,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vcpu->syscall_tbl = (void *) &dune_syscall_tbl;
 
 	spin_lock_init(&vcpu->ept_lock);
-	if (vmx_create_ept(vcpu))
+	if (vmx_init_ept(vcpu))
 		goto fail_ept;
 
 	vmx_get_cpu(vcpu);
@@ -939,6 +1019,9 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vmx_setup_initial_guest_state(conf);
 	vpid_sync_context(vcpu->vpid);
 	vmx_put_cpu(vcpu);
+
+	if (vmx_create_ept(vcpu))
+		goto fail_ept;
 
 	return vcpu;
 
@@ -957,13 +1040,12 @@ fail_vmcs:
  */
 static void vmx_destroy_vcpu(struct vmx_vcpu *vcpu)
 {
+	vmx_destroy_ept(vcpu);
 	vmx_get_cpu(vcpu);
-	ept_sync_vcpu(vcpu);
-	if (vcpu->launched)
-		vmcs_clear(vcpu->vmcs);
+	ept_sync_context(vcpu->eptp);
+	vmcs_clear(vcpu->vmcs);
 	__get_cpu_var(local_vcpu) = NULL;
 	vmx_put_cpu(vcpu);
-	vmx_destroy_ept(vcpu);
 	vmx_free_vpid(vcpu);
 	vmx_free_vmcs(vcpu->vmcs);
 	kfree(vcpu);
@@ -1236,10 +1318,20 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 	int exit_qual, ret;
 
 	vmx_get_cpu(vcpu);
+	exit_qual = vmcs_read32(EXIT_QUALIFICATION);
 	gva = vmcs_readl(GUEST_LINEAR_ADDRESS);
 	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
-	exit_qual = vmcs_read32(EXIT_QUALIFICATION);
 	vmx_put_cpu(vcpu);
+	
+	if (exit_qual & (1 << 6)) {
+		printk(KERN_ERR "EPT: GPA 0x%lx exceeds GAW!\n", gpa);
+		return -EINVAL;
+	}
+	
+	if (!(exit_qual & (1 << 7))) {
+		printk(KERN_ERR "EPT: linear address is not valid, GPA: 0x%lx!\n", gpa);
+		return -EINVAL;
+	}
 
 	ret = vmx_do_ept_fault(vcpu, gpa, gva, exit_qual);
 
@@ -1257,6 +1349,13 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 {
 	if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
+		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
+		return;
+	}
+	
+	if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
+		     vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
+		printk(KERN_INFO "vmx: got unsupported syscall\n");
 		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
 		return;
 	}

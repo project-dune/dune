@@ -5,6 +5,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/types.h>
 #include <asm/vmx.h>
+#include <linux/kvm_types.h>
 
 struct vmcs {
 	u32 revision_id;
@@ -79,6 +80,7 @@ extern __exit void vmx_exit(void);
 
 extern int vmx_launch(struct dune_config *conf);
 
+extern int vmx_init_ept(struct vmx_vcpu *vcpu);
 extern int vmx_create_ept(struct vmx_vcpu *vcpu);
 extern void vmx_destroy_ept(struct vmx_vcpu *vcpu);
 
@@ -86,4 +88,5 @@ extern int
 vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 		 unsigned long gva, int fault_flags);
 
-extern void ept_sync_vcpu(struct vmx_vcpu *vcpu);
+extern void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu);
+extern void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa);
