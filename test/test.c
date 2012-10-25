@@ -51,7 +51,7 @@ static int test_fork(void)
 			return 6;
 	}
 
-	return 0;
+	return 666;
 }
 
 static void *test_pthread_thread(void *arg)
@@ -91,7 +91,7 @@ static int test_pthread(void)
 	if (check_dune())
 		return 6;
 
-	return 0;
+	return 666;
 }
 
 static int test_signal_glob;
@@ -121,7 +121,7 @@ static int test_signal(void)
 	if (test_signal_glob != 666)
 		return 2;
 
-	return 0;
+	return 666; 
 }
 
 static struct test {
@@ -135,7 +135,7 @@ static struct test {
 
 static void run_test(struct test *t)
 {
-	int rc;
+	int rc, status;
 	int pid;
 
 	printf("==== Running test %s\n", t->name);
@@ -150,13 +150,17 @@ static void run_test(struct test *t)
 		exit(rc);
 	}
 
-	if (waitpid(pid, &rc, 0) == -1)
+	if (waitpid(pid, &status, 0) == -1)
 		err(1, "waitpid()");
 
-	rc = WEXITSTATUS(rc);
+	rc = WEXITSTATUS(status);
 
-	printf("==== Test %s - %s", t->name, rc ? "FAILED" : "passed" );
-	if (rc)
+	printf("==== Test %s - %s", t->name, rc != 666 ? "FAILED" : "passed" );
+
+	if (WIFSIGNALED(status))
+		printf(" [crashed]");
+
+	if (rc != 666)
 		printf(" rc %d\n", rc);
 	else
 		printf("\n");
