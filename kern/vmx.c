@@ -621,6 +621,7 @@ static void __vmx_get_cpu_helper(void *ptr)
 {
 	struct vmx_vcpu *vcpu = ptr;
 
+	BUG_ON(raw_smp_processor_id() != vcpu->cpu);
 	ept_sync_context(vcpu->eptp);
 	vmcs_clear(vcpu->vmcs);
 	if (__get_cpu_var(local_vcpu) == vcpu)
@@ -629,9 +630,9 @@ static void __vmx_get_cpu_helper(void *ptr)
 
 /**
  * vmx_get_cpu - called before using a cpu
- * @vcpu: VCPU that willl be loaded.
+ * @vcpu: VCPU that will be loaded.
  *
- * Disables preemption. Call vmx_put_pcpu() when finished.
+ * Disables preemption. Call vmx_put_cpu() when finished.
  */
 static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 {
@@ -651,8 +652,9 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 			vmcs_load(vcpu->vmcs);
 			__vmx_setup_cpu();
 			vcpu->cpu = cur_cpu;
-		} else
+		} else {
 			vmcs_load(vcpu->vmcs);
+		}
 	}
 }
 
@@ -665,24 +667,33 @@ static void vmx_put_cpu(struct vmx_vcpu *vcpu)
 	put_cpu();
 }
 
+static void __vmx_sync_helper(void *ptr)
+{
+	struct vmx_vcpu *vcpu = ptr;
+
+	ept_sync_context(vcpu->eptp);
+}
+
 /**
  * vmx_ept_sync_global - used to evict everything in the EPT
+ * @vcpu: the vcpu
  */
 void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu)
 {
-	vmx_get_cpu(vcpu);
-	ept_sync_context(vcpu->eptp);
-	vmx_put_cpu(vcpu);
+	smp_call_function_single(vcpu->cpu,
+		__vmx_sync_helper, (void *) vcpu, 1);
 }
 
 /**
  * vmx_ept_sync_individual_addr - used to evict an individual address
+ * @vcpu: the vcpu
+ * @gpa: the guest-physical address
  */
 void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
 {
-	vmx_get_cpu(vcpu);
-	ept_sync_individual_addr(vcpu->eptp, gpa);
-	vmx_put_cpu(vcpu);
+	//ept_sync_individual_addr(vcpu->eptp, (gpa & ~(PAGE_SIZE - 1)));
+	smp_call_function_single(vcpu->cpu,
+		__vmx_sync_helper, (void *) vcpu, 1);
 }
 
 /**
@@ -1032,8 +1043,7 @@ static void vmx_destroy_vcpu(struct vmx_vcpu *vcpu)
 	vmx_destroy_ept(vcpu);
 	vmx_get_cpu(vcpu);
 	ept_sync_context(vcpu->eptp);
-	if (vcpu->launched)
-		vmcs_clear(vcpu->vmcs);
+	vmcs_clear(vcpu->vmcs);
 	__get_cpu_var(local_vcpu) = NULL;
 	vmx_put_cpu(vcpu);
 	vmx_free_vpid(vcpu);
@@ -1308,10 +1318,20 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 	int exit_qual, ret;
 
 	vmx_get_cpu(vcpu);
+	exit_qual = vmcs_read32(EXIT_QUALIFICATION);
 	gva = vmcs_readl(GUEST_LINEAR_ADDRESS);
 	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
-	exit_qual = vmcs_read32(EXIT_QUALIFICATION);
 	vmx_put_cpu(vcpu);
+	
+	if (exit_qual & (1 << 6)) {
+		printk(KERN_ERR "EPT: GPA 0x%lx exceeds GAW!\n", gpa);
+		return -EINVAL;
+	}
+	
+	if (!(exit_qual & (1 << 7))) {
+		printk(KERN_ERR "EPT: linear address is not valid, GPA: 0x%lx!\n", gpa);
+		return -EINVAL;
+	}
 
 	ret = vmx_do_ept_fault(vcpu, gpa, gva, exit_qual);
 
@@ -1329,6 +1349,13 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 {
 	if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
+		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
+		return;
+	}
+	
+	if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
+		     vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
+		printk(KERN_INFO "vmx: got unsupported syscall\n");
 		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
 		return;
 	}

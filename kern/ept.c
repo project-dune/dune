@@ -114,31 +114,6 @@ static inline int epte_big(epte_t epte)
 	return (epte & __EPTE_SZ) > 0;
 }
 
-static epte_t convert_to_epte(pgprotval_t prot, uintptr_t addr, int leaf)
-{
-	epte_t val = 0;
-
-	val |= (epte_t) addr;
-
-	if (prot & _PAGE_PRESENT) {
-		val |= __EPTE_READ;
-
-		if (prot & _PAGE_RW)
-			val |= __EPTE_WRITE;
-		if (!(prot & _PAGE_NX))
-			val |= __EPTE_EXEC;
-		if (prot & _PAGE_PSE)
-			val |= __EPTE_SZ;
-	}
-
-	if (leaf) {
-		val |= __EPTE_TYPE(EPTE_TYPE_WB);
-		val |= __EPTE_IPAT;
-	}
-
-	return val;
-}
-
 static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu,
 				struct mm_struct *mm,
 				unsigned long addr)
@@ -236,103 +211,9 @@ ept_lookup(struct vmx_vcpu *vcpu, struct mm_struct *mm,
 	return ept_lookup_gpa(vcpu, gpa, level, create, epte_out);
 }
 
-static int
-__vmx_clone_entry(struct vmx_vcpu *vcpu, pgprotval_t prot, unsigned long va)
-{
-	int ret;
-	epte_t *epte;
-
-	struct page *page[1];
-	int make_write = (prot & _PAGE_RW) ? 1 : 0;
-
-	ret = get_user_pages(current, current->mm, va, 1,
-			     make_write, 0, page, NULL);
-	if (ret != 1) {
-		printk(KERN_INFO "vmx: failed to get page at va %lx\n", va);
-		return -EFAULT;
-	}
-
-	ret = ept_lookup(vcpu, current->mm, (void *) va,
-			 (prot & _PAGE_PSE) ? 1 : 0, 1, &epte);
-	if (ret) {
-		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
-		return -EIO;
-	}
-
-	*epte = convert_to_epte(prot, (page_to_phys(page[0]) & PTE_PFN_MASK),
-				1);
-
-	return 0;
-}
-
-#define IDX_TO_ADDR(i, j, k, l) \
-	((((u64) (i)) << 39) | \
-	 (((u64) (j)) << 30) | \
-	 (((u64) (k)) << 21) | \
-	 (((u64) (l)) << 12))
-
-static int vmx_create_clone(struct vmx_vcpu *vcpu)
-{
-	int i, j, k, l, ret;
-	pgd_t *pgd = (pgd_t *) current->mm->pgd;
-	pud_t *pud;
-	pmd_t *pmd;
-	pte_t *pte;
-
-	for (i = 0; i < PTRS_PER_PGD / 2; i++) {
-		pgprotval_t prot = pgd_val(pgd[i]);
-		if (!(prot & _PAGE_PRESENT) ||
-		    !(prot & _PAGE_USER))
-			continue;
-
-		pud = (pud_t *) pgd_page_vaddr(pgd[i]);
-
-		for (j = 0; j < PTRS_PER_PUD; j++) {
-			pgprotval_t prot = pud_val(pud[j]);
-			if (!(prot & _PAGE_PRESENT) ||
-			    !(prot & _PAGE_USER))
-				continue;
-			if (prot & _PAGE_PSE)
-				return -EINVAL;
-
-			pmd = (pmd_t *) pud_page_vaddr(pud[j]);
-
-			for (k = 0; k < PTRS_PER_PMD; k++) {
-				pgprotval_t prot = pmd_val(pmd[k]);
-				if (!(prot & _PAGE_PRESENT) ||
-				    !(prot & _PAGE_USER))
-					continue;
-				if (prot & _PAGE_PSE) {
-					ret = __vmx_clone_entry(vcpu, prot,
-						IDX_TO_ADDR(i, j, k, 0));
-					if (ret)
-						return ret;
-					continue;
-				}
-
-				pte = (pte_t *) pmd_page_vaddr(pmd[k]);
-
-				for (l = 0; l < PTRS_PER_PTE; l++) {
-					pgprotval_t prot = pte_val(pte[l]);
-					if (!(prot & _PAGE_PRESENT) ||
-					    !(prot & _PAGE_USER))
-						continue;
-
-					ret = __vmx_clone_entry(vcpu, prot,
-						IDX_TO_ADDR(i, j, k, l));
-					if (ret)
-						return ret;
-				}
-			}
-		}
-	}
-
-	return 0;
-}
-
 static void free_ept_page(epte_t epte)
 {
-	struct page *page = pfn_to_page((epte & PTE_PFN_MASK) >> PAGE_SHIFT);
+	struct page *page = pfn_to_page(epte_addr(epte) >> PAGE_SHIFT);
 
 	if (epte & __EPTE_WRITE)
 		set_page_dirty_lock(page);
@@ -404,6 +285,7 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 
 	ret = get_user_pages_fast(hva, 1, make_write, &page);
 	if (ret != 1) {
+		printk(KERN_ERR "ept: failed to get user page %lx\n", hva);
 		return ret;
 	}
 
@@ -451,9 +333,6 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 		 gpa, gva, hva, fault_flags);
 
 	ret = ept_set_epte(vcpu, make_write, gpa, hva);
-
-	if (!ret)
-		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
 
 	return ret;
 }
@@ -545,7 +424,7 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 	unsigned long gpa = hva_to_gpa(vcpu, mm, (unsigned long) address);
 	int make_write = (pte_flags(pte) & _PAGE_RW) ? 1 : 0;
 
-	pr_debug("ept: change_pte addr %lx\n", address);
+	pr_debug("ept: change_pte addr %lx flags %lx\n", address, pte_flags(pte));
 
 	if (gpa == GPA_ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", address);
@@ -609,14 +488,6 @@ int vmx_init_ept(struct vmx_vcpu *vcpu)
 int vmx_create_ept(struct vmx_vcpu *vcpu)
 {
 	int ret;
-
-	down_read(&current->mm->mmap_sem);
-	ret = vmx_create_clone(vcpu);
-	if (ret) {
-		up_read(&current->mm->mmap_sem);
-		goto fail;
-	}
-	up_read(&current->mm->mmap_sem);
 
 	vcpu->mmu_notifier.ops = &ept_mmu_notifier_ops;
 	ret = mmu_notifier_register(&vcpu->mmu_notifier, current->mm);
