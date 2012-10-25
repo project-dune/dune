@@ -80,6 +80,7 @@ extern __exit void vmx_exit(void);
 
 extern int vmx_launch(struct dune_config *conf);
 
+extern int vmx_init_ept(struct vmx_vcpu *vcpu);
 extern int vmx_create_ept(struct vmx_vcpu *vcpu);
 extern void vmx_destroy_ept(struct vmx_vcpu *vcpu);
 

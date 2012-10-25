@@ -593,16 +593,22 @@ static const struct mmu_notifier_ops ept_mmu_notifier_ops = {
 	.release		= ept_mmu_notifier_release,
 };
 
-int vmx_create_ept(struct vmx_vcpu *vcpu)
+int vmx_init_ept(struct vmx_vcpu *vcpu)
 {
 	void *page = (void *) __get_free_page(GFP_KERNEL);
-	int ret;
 
 	if (!page)
 		return -ENOMEM;
-	memset(page, 0, PAGE_SIZE);
 
+	memset(page, 0, PAGE_SIZE);
 	vcpu->ept_root =  __pa(page);
+	
+	return 0;
+}
+
+int vmx_create_ept(struct vmx_vcpu *vcpu)
+{
+	int ret;
 
 	down_read(&current->mm->mmap_sem);
 	ret = vmx_create_clone(vcpu);
