@@ -51,7 +51,7 @@ static int test_fork(void)
 			return 6;
 	}
 
-	return 666;
+	return 255;
 }
 
 static void *test_pthread_thread(void *arg)
@@ -91,10 +91,10 @@ static int test_pthread(void)
 	if (check_dune())
 		return 6;
 
-	return 666;
+	return 255;
 }
 
-static int test_signal_glob;
+static int test_signal_glob = 0;
 
 static void test_signal_handler(int num)
 {
@@ -108,8 +108,6 @@ static int test_signal(void)
 	if (dune_enter())
 		return 1;
 
-	pid = 0;
-
 	pid = getpid();
 
 	if (dune_signal(SIGUSR1, test_signal_handler) == SIG_ERR)
@@ -121,7 +119,7 @@ static int test_signal(void)
 	if (test_signal_glob != 666)
 		return 2;
 
-	return 666; 
+	return 255; 
 }
 
 static struct test {
@@ -155,12 +153,12 @@ static void run_test(struct test *t)
 
 	rc = WEXITSTATUS(status);
 
-	printf("==== Test %s - %s", t->name, rc != 666 ? "FAILED" : "passed" );
+	printf("==== Test %s - %s", t->name, rc != 255 ? "FAILED" : "passed" );
 
 	if (WIFSIGNALED(status))
 		printf(" [crashed]");
 
-	if (rc != 666)
+	if (rc != 255)
 		printf(" rc %d\n", rc);
 	else
 		printf("\n");
