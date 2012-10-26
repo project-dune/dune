@@ -230,6 +230,13 @@ __dune_enter:
 1:
 	.endm
 
+__dune_syscall_redirect:
+	pushq	%r11
+	popfq
+	vmcall
+	jmp	*%rcx
+
+
 # System Call ABI
 # ---------------
 #
@@ -251,11 +258,8 @@ __dune_syscall:
 	/* handle system calls from G0 */
 	testq $1, %gs:IN_USERMODE
 	jnz 1f
-	vmcall
-	xchg	%rax, %r11
-	sahf
-	movq	%r11, %rax
-	jmp	*%rcx
+	pushq	$__dune_syscall_redirect
+	ret
 
 1:
 	/* first switch to the kernel stack */
@@ -316,7 +320,8 @@ dune_jump_to_user:
 	/* save the full register state */
 	SAVE_REGS
 	SAVE_REST
-	lahf
+	pushfq
+	popq	%rax
 	movq	%rax, RFLAGS(%rsp)
 
 	/* save the stack pointer */
