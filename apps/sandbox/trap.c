@@ -28,9 +28,17 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <err.h>
+#include <linux/futex.h>
 
 #include "sandbox.h"
 #include "boxer.h"
+
+struct thread_arg {
+	pthread_cond_t	ta_cnd;
+	pthread_mutex_t	ta_mtx;
+	pid_t		ta_tid;
+	struct dune_tf	*ta_tf;
+};
 
 int exec_execev(const char *filename, char *const argv[], char *const envp[]);
 
@@ -145,6 +153,82 @@ void thread_entry(unsigned long sp, unsigned long rc, struct dune_tf *t)
 	abort();
 }
 
+static void *pthread_entry(void *arg)
+{
+	struct thread_arg *a = arg;
+	struct dune_tf *tf = a->ta_tf;
+	struct dune_tf child_tf;
+	int *tidp = NULL;
+	pid_t tid;
+	int flags = ARG0(tf);
+	long rc;
+
+	dune_enter();
+
+	tid = syscall(SYS_gettid);
+
+	/* XXX validate */
+	/* set up tls */
+	if (flags & CLONE_SETTLS)
+		dune_set_user_fs(ARG4(tf));
+
+	if (flags & CLONE_PARENT_SETTID) {
+		tidp = (int*) ARG2(tf);
+		*tidp = tid;
+	}
+
+	/* tell parent tid */
+	pthread_mutex_lock(&a->ta_mtx);
+	a->ta_tid = tid;
+	pthread_mutex_unlock(&a->ta_mtx);
+	pthread_cond_signal(&a->ta_cnd);
+
+	/* enter thread */
+	memcpy(&child_tf, tf, sizeof(child_tf));
+        child_tf.rip = tf->rip;
+	child_tf.rax = 0;
+	child_tf.rsp = ARG1(tf);
+
+	rc = dune_jump_to_user(&child_tf);
+
+	if ((flags & CLONE_CHILD_CLEARTID) && tidp) {
+		*tidp = 0;
+		syscall(SYS_futex, tidp, FUTEX_WAKE, 1, NULL, NULL, 0);
+	}
+
+	syscall(SYS_exit, rc);
+
+	return NULL;
+}
+
+static long dune_pthread_create(struct dune_tf *tf)
+{
+	pthread_t pt;
+	struct thread_arg arg;
+
+	arg.ta_tf  = tf;
+	arg.ta_tid = 0;
+
+	if (pthread_cond_init(&arg.ta_cnd, NULL))
+		return -1;
+
+	if (pthread_mutex_init(&arg.ta_mtx, NULL))
+		return -1;
+
+	if (pthread_create(&pt, NULL, pthread_entry, &arg))
+		return -1;
+
+	pthread_mutex_lock(&arg.ta_mtx);
+	if (arg.ta_tid == 0)
+		pthread_cond_wait(&arg.ta_cnd, &arg.ta_mtx);
+	pthread_mutex_unlock(&arg.ta_mtx);
+
+	pthread_mutex_destroy(&arg.ta_mtx);
+	pthread_cond_destroy(&arg.ta_cnd);
+
+	return arg.ta_tid;
+}
+
 static long dune_clone(struct dune_tf *tf)
 {
 	long rc;
@@ -152,6 +236,9 @@ static long dune_clone(struct dune_tf *tf)
 	unsigned long sp = ARG1(tf);
 	unsigned long *x;
 	struct dune_tf t;
+
+	if (ARG1(tf) != 0)
+		return dune_pthread_create(tf);
 
 	if (ARG1(tf) == 0)
 		t.rip = 0; /* fork */
@@ -385,9 +472,9 @@ static int syscall_check_params(struct dune_tf *tf)
 	case SYS_setuid:
 	case SYS_getgid:
 	case SYS_setgid:
+	case SYS_getpid:
 	case SYS_epoll_create:
 	case SYS_dup2:
-	case SYS_getpid:
 	case SYS_socket:
 	case SYS_shutdown:
 	case SYS_listen:
