@@ -321,8 +321,7 @@ dune_jump_to_user:
 	SAVE_REGS
 	SAVE_REST
 	pushfq
-	popq	%rax
-	movq	%rax, RFLAGS(%rsp)
+	popq	RFLAGS(%rsp)
 
 	/* save the stack pointer */
 	movq	%rsp, %gs:TRAP_STACK
@@ -380,20 +379,17 @@ __dune_intr_with_num:
 	movq	%rax, %rdi
 
 	/* then restore the CPL0 FS base address */
-	mov	%cs, %rsi
-	test	$3, %rsi
+	testq	$3, CS(%rsp)
 	jz	__dune_intr_handler
 	SET_G0_FS_BASE
 
 __dune_intr_handler:
 	/* setup arguments and call the handler */
-	movq	ERR(%rsp), %rsi
 	movq	%rsp, %rsi
 	call	dune_trap_handler
 
 	/* next restore the CPL3 FS base address */
-	mov	%cs, %rsi
-	test	$3, %rsi
+	testq	$3, CS(%rsp)
 	jz	__dune_intr_done
 	SET_G3_FS_BASE
 
