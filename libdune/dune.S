@@ -187,7 +187,7 @@
 
 .globl __dune_enter
 __dune_enter:
-	subq	$TF_END, %rsp
+	subq	$REG_END, %rsp
 
 	SAVE_REGS 1, 0
 	SAVE_REST
@@ -197,7 +197,7 @@ __dune_enter:
 	movq	$16, %rax
 	syscall
 
-	# should only make it here if entry fails
+	/* should only make it here if entry fails */
 	jmp __dune_ret
 
 .globl	__dune_ret
@@ -205,25 +205,27 @@ __dune_ret:
 	RESTORE_REST
 	RESTORE_REGS 1, 0
 
-	addq	$TF_END, %rsp
+	addq	$REG_END, %rsp
 	retq
 
-# System Call ABI
-# ---------------
-#
-# User Parameters:
-# %rsp - stack pointer
-# %rcx - instruction pointer
-# %r11 - eflags
-# %rax - system call number
-#
-# Arguments:
-# %rdi - arg0, %rsi - arg1, %rdx - arg2
-# %r10 - arg3, %r8 - arg4, %r9 - arg5
-#
-# Return code goes in %rax
-
-# XXX don't do relative jumps - watch out code is memcpy
+/*
+ * System Call ABI
+ * ---------------
+ *
+ * User Parameters:
+ * %rsp - stack pointer
+ * %rcx - instruction pointer
+ * %r11 - eflags
+ * %rax - system call number
+ *
+ * Arguments:
+ * %rdi - arg0, %rsi - arg1, %rdx - arg2
+ * %r10 - arg3, %r8 - arg4, %r9 - arg5
+ *
+ * Return code goes in %rax
+ *
+ * XXX: don't do relative jumps - watch out code is memcpy
+ */
 .globl __dune_syscall
 __dune_syscall:
 	/* handle system calls from G0 */
