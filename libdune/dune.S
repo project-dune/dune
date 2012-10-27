@@ -50,6 +50,14 @@
 #define TF_END	(168)
 
 /*
+ * Dune Config Format
+ * NOTE: this reflects the layout of struct dune_config
+ */
+#define DUNE_CFG_RIP	(0)
+#define DUNE_CFG_RSP	(8)
+#define DUNE_CFG_CR3	(16)
+
+/*
  * Supervisor Private Area Format
  */
 
@@ -59,60 +67,7 @@
 #define IN_USERMODE	(24)
 #define TRAP_STACK	(36)
 
-.data
-stack:
-	.long	0
-
 .text
-
-# This routine restores process state after a DUNE mode transition
-.globl	__dune_ret
-__dune_ret:
-	movq	stack, %rsp
-	popq	%rbp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%r11
-	popq	%r10
-	popq	%r9
-	popq	%r8
-	popq	%rdi
-	popq	%rsi
-	popq	%rdx
-	popq	%rcx
-	popq	%rbx
-	# Note that %rax is set to zero by the hyperviser.
-	# Otherwise, if this is a failed entry it will be
-	# set by the ioctl() syscall.
-	retq
-
-# This routine invokes a transition to DUNE mode
-.globl __dune_enter
-__dune_enter:
-	pushq	%rbx
-	pushq	%rcx
-	pushq	%rdx
-	pushq	%rsi
-	pushq	%rdi
-	pushq	%r8
-	pushq	%r9
-	pushq	%r10
-	pushq	%r11
-	pushq	%r12
-	pushq	%r13
-	pushq	%r14
-	pushq	%r15
-	pushq	%rbp
-	movq %rsp, stack
-	movq %rsi, %rdx
-	movq $0x8018e901, %rsi /* XXX DUNE_ENTER */
-	movq $16, %rax
-	syscall
-
-	# should only make it here if entry fails
-	jmp __dune_ret
 
 /*
  * macro to save destructable register state
@@ -229,6 +184,29 @@ __dune_enter:
 #endif /* USE_RDWRGSFS */
 1:
 	.endm
+
+.globl __dune_enter
+__dune_enter:
+	subq	$TF_END, %rsp
+
+	SAVE_REGS 1, 0
+	SAVE_REST
+	movq	%rsp, DUNE_CFG_RSP(%rsi)
+	movq	%rsi, %rdx
+	movq	$0x8018e901, %rsi /* XXX DUNE_ENTER */
+	movq	$16, %rax
+	syscall
+
+	# should only make it here if entry fails
+	jmp __dune_ret
+
+.globl	__dune_ret
+__dune_ret:
+	RESTORE_REST
+	RESTORE_REGS 1, 0
+
+	addq	$TF_END, %rsp
+	retq
 
 # System Call ABI
 # ---------------
