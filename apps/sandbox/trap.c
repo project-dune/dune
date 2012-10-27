@@ -154,6 +154,55 @@ void thread_entry(unsigned long sp, unsigned long rc, struct dune_tf *t)
 	abort();
 }
 
+static void map_stack(void)
+{
+	unsigned long sp;
+	char buf[4096 * 100];
+	int rc, fd;
+	char *p, *p2;
+
+	asm ("mov %%rsp, %0" : "=r" (sp));
+
+	if ((fd = open("/proc/self/maps", O_RDONLY)) == -1)
+		err(1, "open()");
+
+	rc = read(fd, buf, sizeof(buf) - 1);
+	if (rc < 0)
+		err(1, "read()");
+
+	if (rc == (sizeof(buf) - 1))
+		errx(1, "need more space dude");
+
+	buf[rc] = 0;
+
+	close(fd);
+
+	p = buf;
+
+	while (*p) {
+		unsigned long start, end;
+
+		p2 = strchr(p, '\n');
+		if (*p2)
+			*p2++ = 0;
+		else
+			p2 = p + strlen(p);
+
+		if (sscanf(p, "%lx-%lx ", &start, &end) != 2)
+			errx(1, "sscanf()");
+
+		if (sp >= start && sp < end) {
+//			printf("SP %lx start %lx end %lx\n", sp, start, end);
+			dune_map_ptr((void*) start, end - start);
+			return;
+		}
+
+		p = p2;
+	}
+
+	errx(1, "stack not found");
+}
+
 static void *pthread_entry(void *arg)
 {
 	struct thread_arg *a = arg;
@@ -162,6 +211,8 @@ static void *pthread_entry(void *arg)
 	int *tidp = NULL;
 	pid_t tid;
 	int flags = ARG0(tf);
+
+	map_stack();
 
 	dune_enter();
 
