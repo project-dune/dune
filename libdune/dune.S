@@ -187,8 +187,8 @@
 
 .globl __dune_enter
 __dune_enter:
+	pushfq
 	subq	$REG_END, %rsp
-
 	SAVE_REGS 1, 0
 	SAVE_REST
 	movq	%rsp, DUNE_CFG_RSP(%rsi)
@@ -204,8 +204,8 @@ __dune_enter:
 __dune_ret:
 	RESTORE_REST
 	RESTORE_REGS 1, 0
-
 	addq	$REG_END, %rsp
+	popfq
 	retq
 
 /*
