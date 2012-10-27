@@ -702,10 +702,18 @@ void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
  */
 static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 {
+	unsigned long flags;
+
+	vmx_get_cpu(vcpu);
+	vcpu->regs[VCPU_REGS_RIP] = vmcs_readl(GUEST_RIP);
+	vcpu->regs[VCPU_REGS_RSP] = vmcs_readl(GUEST_RSP);
+	flags = vmcs_readl(GUEST_RFLAGS);
+	vmx_put_cpu(vcpu);
 
 	printk(KERN_INFO "vmx: --- Begin VCPU Dump ---\n");
 	printk(KERN_INFO "vmx: CPU %d VPID %d\n", vcpu->cpu, vcpu->vpid);
-	printk(KERN_INFO "vmx: RIP 0x%016llx\n", vcpu->regs[VCPU_REGS_RIP]);
+	printk(KERN_INFO "vmx: RIP 0x%016llx RFLAGS 0x%08lx\n",
+	       vcpu->regs[VCPU_REGS_RIP], flags);
 	printk(KERN_INFO "vmx: RAX 0x%016llx RCX 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_RAX], vcpu->regs[VCPU_REGS_RCX]);
 	printk(KERN_INFO "vmx: RDX 0x%016llx RBX 0x%016llx\n",
