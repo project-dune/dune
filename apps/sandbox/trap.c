@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <err.h>
 #include <linux/futex.h>
+#include <linux/unistd.h>
 
 #include "sandbox.h"
 #include "boxer.h"
@@ -161,7 +162,6 @@ static void *pthread_entry(void *arg)
 	int *tidp = NULL;
 	pid_t tid;
 	int flags = ARG0(tf);
-	long rc;
 
 	dune_enter();
 
@@ -177,6 +177,11 @@ static void *pthread_entry(void *arg)
 		*tidp = tid;
 	}
 
+	if (flags & CLONE_CHILD_CLEARTID) {
+		tidp = (int*) ARG3(tf);
+		syscall(SYS_set_tid_address, tidp);
+	}
+
 	/* tell parent tid */
 	pthread_mutex_lock(&a->ta_mtx);
 	a->ta_tid = tid;
@@ -189,14 +194,7 @@ static void *pthread_entry(void *arg)
 	child_tf.rax = 0;
 	child_tf.rsp = ARG1(tf);
 
-	rc = dune_jump_to_user(&child_tf);
-
-	if ((flags & CLONE_CHILD_CLEARTID) && tidp) {
-		*tidp = 0;
-		syscall(SYS_futex, tidp, FUTEX_WAKE, 1, NULL, NULL, 0);
-	}
-
-	syscall(SYS_exit, rc);
+	do_enter_thread(&child_tf);
 
 	return NULL;
 }
