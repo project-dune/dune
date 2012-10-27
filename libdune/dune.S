@@ -230,13 +230,6 @@ __dune_enter:
 1:
 	.endm
 
-__dune_syscall_redirect:
-	pushq	%r11
-	popfq
-	vmcall
-	jmp	*%rcx
-
-
 # System Call ABI
 # ---------------
 #
@@ -258,8 +251,10 @@ __dune_syscall:
 	/* handle system calls from G0 */
 	testq $1, %gs:IN_USERMODE
 	jnz 1f
-	pushq	$__dune_syscall_redirect
-	ret
+	pushq	%r11
+	popfq
+	vmcall
+	jmp	*%rcx
 
 1:
 	/* first switch to the kernel stack */

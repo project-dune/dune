@@ -1112,8 +1112,22 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	vmx_get_cpu(vcpu);
 	regs->ip = vmcs_readl(GUEST_RIP);
 	regs->sp = vmcs_readl(GUEST_RSP);
-	regs->flags = vmcs_readl(GUEST_RFLAGS);
+	/* FIXME: do we need to set up other flags? */
+	regs->flags = (vmcs_readl(GUEST_RFLAGS) & 0xFF) |
+		      X86_EFLAGS_IF | 0x2;
 	vmx_put_cpu(vcpu);
+
+	/*
+	 * NOTE: Since Dune processes use the kernel's LSTAR
+	 * syscall address, we need special logic to handle
+	 * certain system calls (fork, clone, etc.) The specifc
+	 * issue is that we can not jump to a high address
+	 * in a child process since it is not running in Dune.
+	 * Our solution is to adopt a special Dune convention
+	 * where the desired %RIP address is provided in %RCX.
+	 */ 
+	if (!(__addr_ok(regs->ip)))
+		regs->ip = regs->cx;
 
 	regs->cs = __USER_CS;
 	regs->ss = __USER_DS;
