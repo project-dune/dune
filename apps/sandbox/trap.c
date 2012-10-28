@@ -59,9 +59,12 @@ pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 		dune_dump_trap_frame(tf);
 		dune_ret_from_user(-EFAULT);
 	} else {
+		/* XXX use mem lock */
+		pthread_mutex_lock(&_syscall_mtx);
 		ret = dune_vm_lookup(pgroot, (void *) addr, CREATE_NORMAL, &pte);
 		assert(!ret);
 		*pte = PTE_P | PTE_W | PTE_ADDR(dune_va_to_pa((void *) addr));
+		pthread_mutex_unlock(&_syscall_mtx);
 	}
 }
 
@@ -707,7 +710,12 @@ static void syscall_handler(struct dune_tf *tf)
 
 int trap_init(void)
 {
-	if (pthread_mutex_init(&_syscall_mtx, NULL))
+	pthread_mutexattr_t attr;
+
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_NORMAL);
+
+	if (pthread_mutex_init(&_syscall_mtx, &attr))
 		return -1;
 
 	dune_register_pgflt_handler(pgflt_handler);
