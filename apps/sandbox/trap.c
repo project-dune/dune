@@ -233,17 +233,17 @@ static void *pthread_entry(void *arg)
 		syscall(SYS_set_tid_address, tidp);
 	}
 
-	/* tell parent tid */
-	pthread_mutex_lock(&a->ta_mtx);
-	a->ta_tid = tid;
-	pthread_mutex_unlock(&a->ta_mtx);
-	pthread_cond_signal(&a->ta_cnd);
-
 	/* enter thread */
 	memcpy(&child_tf, tf, sizeof(child_tf));
         child_tf.rip = tf->rip;
 	child_tf.rax = 0;
 	child_tf.rsp = ARG1(tf);
+
+	/* tell parent tid */
+	pthread_mutex_lock(&a->ta_mtx);
+	a->ta_tid = tid;
+	pthread_mutex_unlock(&a->ta_mtx);
+	pthread_cond_signal(&a->ta_cnd);
 
 	do_enter_thread(&child_tf);
 
