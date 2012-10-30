@@ -712,6 +712,17 @@ static void syscall_do_foreal(struct dune_tf *tf)
 		tf->rax = 0;
 		break;
 
+	case SYS_sigaltstack:
+	case SYS_signalfd:
+	case SYS_signalfd4:
+	case SYS_rt_sigpending:
+	case SYS_rt_sigreturn:
+	case SYS_rt_sigsuspend:
+	case SYS_rt_sigqueueinfo:
+	case SYS_rt_sigtimedwait:
+		tf->rax = -ENOSYS;
+		break;
+
 	case SYS_exit_group:
 	case SYS_exit:
 		dune_ret_from_user(ARG0(tf));
