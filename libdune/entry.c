@@ -68,7 +68,7 @@ void dune_set_user_fs(unsigned long fs_base)
 	     [ufs_base]"i"(offsetof(struct dune_percpu, ufs_base)));
 }
 
-static void map_ptr(void *p, int len)
+void dune_map_ptr(void *p, int len)
 {
 	unsigned long page = PGADDR(p);
 	unsigned long page_end = PGADDR((char*) p + len);
@@ -90,7 +90,7 @@ static int setup_safe_stack(struct dune_percpu *percpu)
 	if (safe_stack == MAP_FAILED)
 		return -ENOMEM;
 
-	map_ptr(safe_stack, PGSIZE);
+	dune_map_ptr(safe_stack, PGSIZE);
 
 	safe_stack += PGSIZE;
 	percpu->tss.tss_iomb = offsetof(struct Tss, tss_iopb);
@@ -353,9 +353,9 @@ struct dune_percpu *setup_percpu(void)
 	if (percpu == MAP_FAILED)
 		return NULL;
 
-	map_ptr(percpu, sizeof(*percpu));
+	dune_map_ptr(percpu, sizeof(*percpu));
 
-        percpu->kfs_base = _percpu ? _percpu->kfs_base : fs_base;
+        percpu->kfs_base = fs_base;
 	percpu->ufs_base = fs_base;
 	percpu->in_usermode = 0;
 

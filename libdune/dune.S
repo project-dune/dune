@@ -50,6 +50,14 @@
 #define TF_END	(168)
 
 /*
+ * Dune Config Format
+ * NOTE: this reflects the layout of struct dune_config
+ */
+#define DUNE_CFG_RIP	(0)
+#define DUNE_CFG_RSP	(8)
+#define DUNE_CFG_CR3	(16)
+
+/*
  * Supervisor Private Area Format
  */
 
@@ -59,60 +67,7 @@
 #define IN_USERMODE	(24)
 #define TRAP_STACK	(36)
 
-.data
-stack:
-	.long	0
-
 .text
-
-# This routine restores process state after a DUNE mode transition
-.globl	__dune_ret
-__dune_ret:
-	movq	stack, %rsp
-	popq	%rbp
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%r11
-	popq	%r10
-	popq	%r9
-	popq	%r8
-	popq	%rdi
-	popq	%rsi
-	popq	%rdx
-	popq	%rcx
-	popq	%rbx
-	# Note that %rax is set to zero by the hyperviser.
-	# Otherwise, if this is a failed entry it will be
-	# set by the ioctl() syscall.
-	retq
-
-# This routine invokes a transition to DUNE mode
-.globl __dune_enter
-__dune_enter:
-	pushq	%rbx
-	pushq	%rcx
-	pushq	%rdx
-	pushq	%rsi
-	pushq	%rdi
-	pushq	%r8
-	pushq	%r9
-	pushq	%r10
-	pushq	%r11
-	pushq	%r12
-	pushq	%r13
-	pushq	%r14
-	pushq	%r15
-	pushq	%rbp
-	movq %rsp, stack
-	movq %rsi, %rdx
-	movq $0x8018e901, %rsi /* XXX DUNE_ENTER */
-	movq $16, %rax
-	syscall
-
-	# should only make it here if entry fails
-	jmp __dune_ret
 
 /*
  * macro to save destructable register state
@@ -230,31 +185,55 @@ __dune_enter:
 1:
 	.endm
 
-# System Call ABI
-# ---------------
-#
-# User Parameters:
-# %rsp - stack pointer
-# %rcx - instruction pointer
-# %r11 - eflags
-# %rax - system call number
-#
-# Arguments:
-# %rdi - arg0, %rsi - arg1, %rdx - arg2
-# %r10 - arg3, %r8 - arg4, %r9 - arg5
-#
-# Return code goes in %rax
+.globl __dune_enter
+__dune_enter:
+	pushfq
+	subq	$REG_END, %rsp
+	SAVE_REGS 1, 0
+	SAVE_REST
+	movq	%rsp, DUNE_CFG_RSP(%rsi)
+	movq	%rsi, %rdx
+	movq	$0x8018e901, %rsi /* XXX DUNE_ENTER */
+	movq	$16, %rax
+	syscall
 
-# XXX don't do relative jumps - watch out code is memcpy
+	/* should only make it here if entry fails */
+	jmp __dune_ret
+
+.globl	__dune_ret
+__dune_ret:
+	RESTORE_REST
+	RESTORE_REGS 1, 0
+	addq	$REG_END, %rsp
+	popfq
+	retq
+
+/*
+ * System Call ABI
+ * ---------------
+ *
+ * User Parameters:
+ * %rsp - stack pointer
+ * %rcx - instruction pointer
+ * %r11 - eflags
+ * %rax - system call number
+ *
+ * Arguments:
+ * %rdi - arg0, %rsi - arg1, %rdx - arg2
+ * %r10 - arg3, %r8 - arg4, %r9 - arg5
+ *
+ * Return code goes in %rax
+ *
+ * XXX: don't do relative jumps - watch out code is memcpy
+ */
 .globl __dune_syscall
 __dune_syscall:
 	/* handle system calls from G0 */
 	testq $1, %gs:IN_USERMODE
 	jnz 1f
+	pushq	%r11
+	popfq
 	vmcall
-	xchg	%rax, %r11
-	sahf
-	movq	%r11, %rax
 	jmp	*%rcx
 
 1:
@@ -316,8 +295,8 @@ dune_jump_to_user:
 	/* save the full register state */
 	SAVE_REGS
 	SAVE_REST
-	lahf
-	movq	%rax, RFLAGS(%rsp)
+	pushfq
+	popq	RFLAGS(%rsp)
 
 	/* save the stack pointer */
 	movq	%rsp, %gs:TRAP_STACK
@@ -375,20 +354,17 @@ __dune_intr_with_num:
 	movq	%rax, %rdi
 
 	/* then restore the CPL0 FS base address */
-	mov	%cs, %rsi
-	test	$3, %rsi
+	testq	$3, CS(%rsp)
 	jz	__dune_intr_handler
 	SET_G0_FS_BASE
 
 __dune_intr_handler:
 	/* setup arguments and call the handler */
-	movq	ERR(%rsp), %rsi
 	movq	%rsp, %rsi
 	call	dune_trap_handler
 
 	/* next restore the CPL3 FS base address */
-	mov	%cs, %rsi
-	test	$3, %rsi
+	testq	$3, CS(%rsp)
 	jz	__dune_intr_done
 	SET_G3_FS_BASE
 

@@ -8,16 +8,19 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "dune.h"
 
 #define GROW_SIZE	512
 
- struct page *pages;
- static struct page_head pages_free;
- int num_pages;
+static pthread_mutex_t page_mutex = PTHREAD_MUTEX_INITIALIZER;
 
- static void * do_mapping(void *base, unsigned long len)
+struct page *pages;
+static struct page_head pages_free;
+int num_pages;
+
+static void * do_mapping(void *base, unsigned long len)
 {
 	void *mem;
 
@@ -39,7 +42,7 @@
 	return mem;
 }
 
- static int grow_size(void)
+static int grow_size(void)
 {
 	int i;
 	int new_num_pages = num_pages + GROW_SIZE;
@@ -74,30 +77,36 @@ void dune_page_stats(void)
 			   num_alloc, num_pages - num_alloc, num_pages);
 }
 
- struct page * dune_page_alloc(void)
+struct page * dune_page_alloc(void)
 {
 	struct page *pg;
 
+	pthread_mutex_lock(&page_mutex);
 	if (SLIST_EMPTY(&pages_free)) {
-		if (grow_size())
+		if (grow_size()) {
+			pthread_mutex_unlock(&page_mutex);
 			return NULL;
+		}
 	}
 
 	pg = SLIST_FIRST(&pages_free);
 	SLIST_REMOVE_HEAD(&pages_free, link);
+	pthread_mutex_unlock(&page_mutex);
 
 	dune_page_get(pg);
 
 	return pg;
 }
 
- void dune_page_free(struct page *pg)
+void dune_page_free(struct page *pg)
 {
 	assert(!pg->ref);
+	pthread_mutex_lock(&page_mutex);
 	SLIST_INSERT_HEAD(&pages_free, pg, link);
+	pthread_mutex_unlock(&page_mutex);
 }
 
- bool dune_page_isfrompool(physaddr_t pa)
+bool dune_page_isfrompool(physaddr_t pa)
 {
 	// XXX: Insufficent?
 	return (pa >= PAGEBASE) && (pa < PAGEBASE + num_pages*PGSIZE);

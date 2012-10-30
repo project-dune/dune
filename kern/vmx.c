@@ -702,10 +702,18 @@ void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
  */
 static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 {
+	unsigned long flags;
+
+	vmx_get_cpu(vcpu);
+	vcpu->regs[VCPU_REGS_RIP] = vmcs_readl(GUEST_RIP);
+	vcpu->regs[VCPU_REGS_RSP] = vmcs_readl(GUEST_RSP);
+	flags = vmcs_readl(GUEST_RFLAGS);
+	vmx_put_cpu(vcpu);
 
 	printk(KERN_INFO "vmx: --- Begin VCPU Dump ---\n");
 	printk(KERN_INFO "vmx: CPU %d VPID %d\n", vcpu->cpu, vcpu->vpid);
-	printk(KERN_INFO "vmx: RIP 0x%016llx\n", vcpu->regs[VCPU_REGS_RIP]);
+	printk(KERN_INFO "vmx: RIP 0x%016llx RFLAGS 0x%08lx\n",
+	       vcpu->regs[VCPU_REGS_RIP], flags);
 	printk(KERN_INFO "vmx: RAX 0x%016llx RCX 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_RAX], vcpu->regs[VCPU_REGS_RCX]);
 	printk(KERN_INFO "vmx: RDX 0x%016llx RBX 0x%016llx\n",
@@ -1104,8 +1112,22 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	vmx_get_cpu(vcpu);
 	regs->ip = vmcs_readl(GUEST_RIP);
 	regs->sp = vmcs_readl(GUEST_RSP);
-	regs->flags = vmcs_readl(GUEST_RFLAGS);
+	/* FIXME: do we need to set up other flags? */
+	regs->flags = (vmcs_readl(GUEST_RFLAGS) & 0xFF) |
+		      X86_EFLAGS_IF | 0x2;
 	vmx_put_cpu(vcpu);
+
+	/*
+	 * NOTE: Since Dune processes use the kernel's LSTAR
+	 * syscall address, we need special logic to handle
+	 * certain system calls (fork, clone, etc.) The specifc
+	 * issue is that we can not jump to a high address
+	 * in a child process since it is not running in Dune.
+	 * Our solution is to adopt a special Dune convention
+	 * where the desired %RIP address is provided in %RCX.
+	 */ 
+	if (!(__addr_ok(regs->ip)))
+		regs->ip = regs->cx;
 
 	regs->cs = __USER_CS;
 	regs->ss = __USER_DS;

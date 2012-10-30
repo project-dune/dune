@@ -28,9 +28,18 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <err.h>
+#include <linux/futex.h>
+#include <linux/unistd.h>
 
 #include "sandbox.h"
 #include "boxer.h"
+
+struct thread_arg {
+	pthread_cond_t	ta_cnd;
+	pthread_mutex_t	ta_mtx;
+	pid_t		ta_tid;
+	struct dune_tf	*ta_tf;
+};
 
 int exec_execev(const char *filename, char *const argv[], char *const envp[]);
 
@@ -50,9 +59,12 @@ pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 		dune_dump_trap_frame(tf);
 		dune_ret_from_user(-EFAULT);
 	} else {
+		/* XXX use mem lock */
+		pthread_mutex_lock(&_syscall_mtx);
 		ret = dune_vm_lookup(pgroot, (void *) addr, CREATE_NORMAL, &pte);
 		assert(!ret);
 		*pte = PTE_P | PTE_W | PTE_ADDR(dune_va_to_pa((void *) addr));
+		pthread_mutex_unlock(&_syscall_mtx);
 	}
 }
 
@@ -145,6 +157,130 @@ void thread_entry(unsigned long sp, unsigned long rc, struct dune_tf *t)
 	abort();
 }
 
+static void map_stack(void)
+{
+	unsigned long sp;
+	char buf[4096 * 100];
+	int rc, fd;
+	char *p, *p2;
+
+	asm ("mov %%rsp, %0" : "=r" (sp));
+
+	if ((fd = open("/proc/self/maps", O_RDONLY)) == -1)
+		err(1, "open()");
+
+	rc = read(fd, buf, sizeof(buf) - 1);
+	if (rc < 0)
+		err(1, "read()");
+
+	if (rc == (sizeof(buf) - 1))
+		errx(1, "need more space dude");
+
+	buf[rc] = 0;
+
+	close(fd);
+
+	p = buf;
+
+	while (*p) {
+		unsigned long start, end;
+
+		p2 = strchr(p, '\n');
+		if (*p2)
+			*p2++ = 0;
+		else
+			p2 = p + strlen(p);
+
+		if (sscanf(p, "%lx-%lx ", &start, &end) != 2)
+			errx(1, "sscanf()");
+
+		if (sp >= start && sp < end) {
+//			printf("SP %lx start %lx end %lx\n", sp, start, end);
+			dune_map_ptr((void*) start, end - start);
+			return;
+		}
+
+		p = p2;
+	}
+
+	errx(1, "stack not found");
+}
+
+static void *pthread_entry(void *arg)
+{
+	struct thread_arg *a = arg;
+	struct dune_tf *tf = a->ta_tf;
+	struct dune_tf child_tf;
+	int *tidp = NULL;
+	pid_t tid;
+	int flags = ARG0(tf);
+
+	map_stack();
+
+	dune_enter();
+
+	tid = syscall(SYS_gettid);
+
+	/* XXX validate */
+	/* set up tls */
+	if (flags & CLONE_SETTLS)
+		dune_set_user_fs(ARG4(tf));
+
+	if (flags & CLONE_PARENT_SETTID) {
+		tidp = (int*) ARG2(tf);
+		*tidp = tid;
+	}
+
+	if (flags & CLONE_CHILD_CLEARTID) {
+		tidp = (int*) ARG3(tf);
+		syscall(SYS_set_tid_address, tidp);
+	}
+
+	/* enter thread */
+	memcpy(&child_tf, tf, sizeof(child_tf));
+        child_tf.rip = tf->rip;
+	child_tf.rax = 0;
+	child_tf.rsp = ARG1(tf);
+
+	/* tell parent tid */
+	pthread_mutex_lock(&a->ta_mtx);
+	a->ta_tid = tid;
+	pthread_mutex_unlock(&a->ta_mtx);
+	pthread_cond_signal(&a->ta_cnd);
+
+	do_enter_thread(&child_tf);
+
+	return NULL;
+}
+
+static long dune_pthread_create(struct dune_tf *tf)
+{
+	pthread_t pt;
+	struct thread_arg arg;
+
+	arg.ta_tf  = tf;
+	arg.ta_tid = 0;
+
+	if (pthread_cond_init(&arg.ta_cnd, NULL))
+		return -1;
+
+	if (pthread_mutex_init(&arg.ta_mtx, NULL))
+		return -1;
+
+	if (pthread_create(&pt, NULL, pthread_entry, &arg))
+		return -1;
+
+	pthread_mutex_lock(&arg.ta_mtx);
+	if (arg.ta_tid == 0)
+		pthread_cond_wait(&arg.ta_cnd, &arg.ta_mtx);
+	pthread_mutex_unlock(&arg.ta_mtx);
+
+	pthread_mutex_destroy(&arg.ta_mtx);
+	pthread_cond_destroy(&arg.ta_cnd);
+
+	return arg.ta_tid;
+}
+
 static long dune_clone(struct dune_tf *tf)
 {
 	long rc;
@@ -152,6 +288,9 @@ static long dune_clone(struct dune_tf *tf)
 	unsigned long sp = ARG1(tf);
 	unsigned long *x;
 	struct dune_tf t;
+
+	if (ARG1(tf) != 0)
+		return dune_pthread_create(tf);
 
 	if (ARG1(tf) == 0)
 		t.rip = 0; /* fork */
@@ -385,9 +524,9 @@ static int syscall_check_params(struct dune_tf *tf)
 	case SYS_setuid:
 	case SYS_getgid:
 	case SYS_setgid:
+	case SYS_getpid:
 	case SYS_epoll_create:
 	case SYS_dup2:
-	case SYS_getpid:
 	case SYS_socket:
 	case SYS_shutdown:
 	case SYS_listen:
@@ -571,7 +710,12 @@ static void syscall_handler(struct dune_tf *tf)
 
 int trap_init(void)
 {
-	if (pthread_mutex_init(&_syscall_mtx, NULL))
+	pthread_mutexattr_t attr;
+
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_NORMAL);
+
+	if (pthread_mutex_init(&_syscall_mtx, &attr))
 		return -1;
 
 	dune_register_pgflt_handler(pgflt_handler);
