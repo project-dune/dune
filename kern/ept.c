@@ -337,7 +337,14 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 	return ret;
 }
 
-/* returns 1 if page table changed, 0 otherwise */
+/**
+ * ept_invalidate_page - removes a page from the EPT
+ * @vcpu: the vcpu
+ * @mm: the process's mm_struct
+ * @addr: the address of the page
+ * 
+ * Returns 1 if the page was removed, 0 otherwise
+ */
 static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 			       struct mm_struct *mm,
 			       unsigned long addr)
@@ -353,14 +360,44 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 
 	spin_lock(&vcpu->ept_lock);
 	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 0, &epte);
-	if (ret)
+	if (ret) {
+		spin_unlock(&vcpu->ept_lock);
 		return 0;
+	}
 
 	ret = ept_clear_epte(epte);
 	spin_unlock(&vcpu->ept_lock);
 
 	if (ret)
 		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
+
+	return ret;
+}
+
+/**
+ * ept_check_page - determines if a page is mapped in the ept
+ * @vcpu: the vcpu
+ * @mm: the process's mm_struct
+ * @addr: the address of the page
+ * 
+ * Returns 1 if the page is mapped, 0 otherwise
+ */
+static int ept_check_page(struct vmx_vcpu *vcpu,
+			  struct mm_struct *mm,
+			  unsigned long addr)
+{
+	int ret;
+	epte_t *epte;
+	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
+
+	if (gpa == (void *) GPA_ADDR_INVAL) {
+		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
+		return 0;
+	}
+
+	spin_lock(&vcpu->ept_lock);
+	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 0, &epte);
+	spin_unlock(&vcpu->ept_lock);
 
 	return ret;
 }
@@ -453,8 +490,11 @@ static int ept_mmu_notifier_test_young(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
 				       unsigned long address)
 {
+	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
+
 	printk(KERN_INFO "ept: test_young addr %lx\n", address);
-	return 0;
+
+	return ept_check_page(vcpu, mm, address);
 }
 
 static void ept_mmu_notifier_release(struct mmu_notifier *mn,
