@@ -2,6 +2,9 @@
  * sandbox.h - the main local header
  */
 
+#ifndef __DUNESB_SANDBOX_H__
+#define __DUNESB_SANDBOX_H__
+
 #include <errno.h>
 #include <sys/types.h>
 #include <stdint.h>
@@ -67,3 +70,6 @@ extern void *umm_mremap(void *old_address, size_t old_size,
 			size_t new_size, int flags, void *new_address);
 
 extern int trap_init(void);
+
+#endif /* __DUNESB_SANDBOX_H__ */
+

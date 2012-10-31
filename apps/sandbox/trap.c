@@ -3,10 +3,12 @@
  */
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <string.h>
 #include <sys/syscall.h>
 #include <asm/prctl.h>
 #include <sys/utsname.h>
@@ -25,7 +27,6 @@
 #include <sched.h>
 #include <linux/sched.h>
 #include <sys/mman.h>
-#include <stdlib.h>
 #include <pthread.h>
 #include <err.h>
 #include <linux/futex.h>
@@ -493,6 +494,54 @@ static int syscall_check_params(struct dune_tf *tf)
 			}
 		}
 		break;
+	case SYS_sigaltstack:
+	case SYS_signalfd:
+	case SYS_signalfd4:
+		ptr = (void*) ARG1(tf);
+		len = sizeof(sigset_t);
+		break;
+	case SYS_rt_sigpending:
+		ptr = (void*) ARG0(tf);
+		len = sizeof(sigset_t);
+		break;
+	case SYS_rt_sigprocmask:
+		if (ARG1(tf)) {
+			ptr = (void*) ARG1(tf);
+			len = sizeof(sigset_t);
+		}
+		if (ARG2(tf)) {
+			if (check_extent((void*) ARG2(tf), sizeof(sigset_t))) {
+				tf->rax = -EFAULT;
+				return -1;
+			}
+		}
+		break;
+	case SYS_rt_sigreturn:
+		break;
+	case SYS_rt_sigsuspend:
+		ptr = (void*) ARG0(tf);
+		len = sizeof(sigset_t);
+		break;
+	case SYS_rt_sigqueueinfo:
+		ptr = (void*) ARG1(tf);
+		len = sizeof(siginfo_t);
+		break;
+	case SYS_rt_sigtimedwait:
+		if (check_extent((void*) ARG0(tf), sizeof(siginfo_t))) {
+			tf->rax = -EFAULT;
+			return -1;
+		}
+		if (check_extent((void*) ARG1(tf), sizeof(siginfo_t))) {
+			tf->rax = -EFAULT;
+			return -1;
+		}
+		if (ARG2(tf)) {
+			if (check_extent((void*) ARG2(tf), sizeof(struct timespec))) {
+				tf->rax = -EFAULT;
+				return -1;
+			}
+		}
+		break;
 
 	/* umm_ checks for correctness */
 	case SYS_brk:
@@ -661,6 +710,17 @@ static void syscall_do_foreal(struct dune_tf *tf)
 	case SYS_rt_sigaction:
 	case SYS_rt_sigprocmask:
 		tf->rax = 0;
+		break;
+
+	case SYS_sigaltstack:
+	case SYS_signalfd:
+	case SYS_signalfd4:
+	case SYS_rt_sigpending:
+	case SYS_rt_sigreturn:
+	case SYS_rt_sigsuspend:
+	case SYS_rt_sigqueueinfo:
+	case SYS_rt_sigtimedwait:
+		tf->rax = -ENOSYS;
 		break;
 
 	case SYS_exit_group:
