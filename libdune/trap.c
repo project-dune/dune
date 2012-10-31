@@ -27,6 +27,11 @@ int dune_register_intr_handler(int vec, dune_intr_cb cb)
 	return 0;
 }
 
+int dune_register_signal_handler(int signum, dune_intr_cb cb)
+{
+	return dune_register_intr_handler(DUNE_SIGNAL_INTR_BASE + signum, cb);
+}
+
 void dune_register_syscall_handler(dune_syscall_cb cb)
 {
 	syscall_cb = cb;

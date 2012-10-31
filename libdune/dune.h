@@ -98,7 +98,11 @@ typedef void (*dune_pgflt_cb) (uintptr_t addr, uint64_t fec,
 			      struct dune_tf *tf);
 typedef void (*dune_syscall_cb) (struct dune_tf *tf);
 
+// XXX: Must match kern/dune.h
+#define DUNE_SIGNAL_INTR_BASE 200
+
 extern int dune_register_intr_handler(int vec, dune_intr_cb cb);
+extern int dune_register_signal_handler(int signum, dune_intr_cb cb);
 extern void dune_register_pgflt_handler(dune_pgflt_cb cb);
 extern void dune_register_syscall_handler(dune_syscall_cb cb);
 
