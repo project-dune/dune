@@ -27,7 +27,6 @@
 ptent_t *pgroot;
 uintptr_t mmap_base;
 uintptr_t stack_base;
-static struct dune_percpu *_percpu;
 
 static int dune_fd;
 
@@ -190,10 +189,18 @@ static void setup_idt(void)
                 
 		id->selector = GD_KT;
 		id->type     = IDTD_P | IDTD_TRAP_GATE;
-		if (i == T_BRKPT)
+
+		switch (i) {
+		case T_BRKPT:
 			id->type |= IDTD_CPL3;
-		if (i == T_BRKPT || i == T_DBLFLT || i == T_NMI || i == T_MCHK)
+			/* fallthrough */
+		case T_DBLFLT: /* XXX double fault should have its own stack */
+		case T_NMI:
+		case T_MCHK:
+		case T_PGFLT:
 			id->ist = 1;
+			break;
+		}
 
 		set_idt_addr(id, isr);
 	}
@@ -389,18 +396,15 @@ int dune_enter(void)
 	struct dune_config conf;
 	uint64_t arch_fs;
 	int ret;
-	int frk = 0;
 
 	if (arch_prctl(ARCH_GET_FS, &arch_fs) == -1) {
 		printf("dune: failed to get FS register\n");
 		return -errno;
 	}
 
-	if (arch_fs == _percpu->kfs_base) {
-		frk    = 1;
-		percpu = _percpu;
-	} else
-		percpu = setup_percpu();
+	/* XXX optimize - on fork, use parent's percpu */
+
+	percpu = setup_percpu();
 
 	conf.rip = (__u64) &__dune_ret;
 	conf.rsp = 0;
@@ -421,8 +425,7 @@ int dune_enter(void)
 	return 0;
 
 fail_enter:
-	if (!frk)
-		free_percpu(percpu);
+	free_percpu(percpu);
 	return ret;
 }
 
@@ -494,11 +497,6 @@ int dune_init(bool map_full)
 	}
 
 	setup_idt();
-
-	if (!(_percpu = setup_percpu())) {
-		ret = -1;
-		goto err;
-	}
 
 	return 0;
 

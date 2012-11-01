@@ -47,6 +47,23 @@ int exec_execev(const char *filename, char *const argv[], char *const envp[]);
 static boxer_syscall_cb _syscall_monitor;
 static pthread_mutex_t _syscall_mtx;
 
+static void print_procmap(void)
+{
+	int fd, rd;
+	char buf[1024];
+
+	if ((fd = open("/proc/self/maps", O_RDONLY)) == -1)
+		err(1, "open()");
+
+	while ((rd = read(fd, buf, sizeof(buf))) > 0)
+		write(1, buf, rd);
+
+	if (rd == -1)
+		err(1, "read()");
+
+	close(fd);
+}
+
 static void
 pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 {
@@ -55,9 +72,12 @@ pgflt_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 	bool was_user = (tf->cs & 0x3);
 
 	if (was_user) {
-		printf("sandbox: got unexpected G3 page fault at addr %lx, fec %lx\n",
-		       addr, fec);
+		pid_t tid = syscall(SYS_gettid);
+		printf("sandbox: got unexpected G3 page fault"
+		       " at addr %lx, fec %lx TID %d\n",
+		       addr, fec, tid);
 		dune_dump_trap_frame(tf);
+		print_procmap();
 		dune_ret_from_user(-EFAULT);
 	} else {
 		/* XXX use mem lock */
@@ -119,94 +139,6 @@ void do_enter_thread(struct dune_tf *tf)
 	syscall(SYS_exit, rc);
 }
 
-void thread_entry(unsigned long sp, unsigned long rc, struct dune_tf *t)
-{
-	struct dune_tf tf;
-	unsigned char *stack;
-	int stacklen = PGSIZE * 10;
-
-	dune_enter();
-
-	/* fork */
-	if (t->rip == 0)
-		return;
-
-        memset(&tf, 0, sizeof(struct dune_tf));
-        tf.rip = t->rip;
-	tf.rax = rc;
-	tf.rsp = sp;
-
-	stack = dune_mmap(NULL, stacklen, PROT_READ | PROT_WRITE,
-			  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (stack == MAP_FAILED) {
-		dune_printf("Can't alloc stack\n");
-		abort();
-	}
-
-        dune_vm_map_phys(pgroot, stack, stacklen, (void*) dune_va_to_pa(stack),
-	                         PERM_R | PERM_W);
-
-	stack += stacklen;
-
-	asm volatile ("mov %0, %%rdi\n\t"
-		      "mov %1, %%rsp\n\t"
-		      "call do_enter_thread\n\t"
-		      : 
-		      : "r" (&tf), "r" (stack)
-		      );
-
-	abort();
-}
-
-static void map_stack(void)
-{
-	unsigned long sp;
-	char buf[4096 * 100];
-	int rc, fd;
-	char *p, *p2;
-
-	asm ("mov %%rsp, %0" : "=r" (sp));
-
-	if ((fd = open("/proc/self/maps", O_RDONLY)) == -1)
-		err(1, "open()");
-
-	rc = read(fd, buf, sizeof(buf) - 1);
-	if (rc < 0)
-		err(1, "read()");
-
-	if (rc == (sizeof(buf) - 1))
-		errx(1, "need more space dude");
-
-	buf[rc] = 0;
-
-	close(fd);
-
-	p = buf;
-
-	while (*p) {
-		unsigned long start, end;
-
-		p2 = strchr(p, '\n');
-		if (*p2)
-			*p2++ = 0;
-		else
-			p2 = p + strlen(p);
-
-		if (sscanf(p, "%lx-%lx ", &start, &end) != 2)
-			errx(1, "sscanf()");
-
-		if (sp >= start && sp < end) {
-//			printf("SP %lx start %lx end %lx\n", sp, start, end);
-			dune_map_ptr((void*) start, end - start);
-			return;
-		}
-
-		p = p2;
-	}
-
-	errx(1, "stack not found");
-}
-
 static void *pthread_entry(void *arg)
 {
 	struct thread_arg *a = arg;
@@ -215,8 +147,6 @@ static void *pthread_entry(void *arg)
 	int *tidp = NULL;
 	pid_t tid;
 	int flags = ARG0(tf);
-
-	map_stack();
 
 	dune_enter();
 
@@ -284,56 +214,24 @@ static long dune_pthread_create(struct dune_tf *tf)
 
 static long dune_clone(struct dune_tf *tf)
 {
-	long rc;
-	void *ptr = NULL;
-	unsigned long sp = ARG1(tf);
-	unsigned long *x;
-	struct dune_tf t;
+	unsigned long fs;
+	int rc;
 
 	if (ARG1(tf) != 0)
 		return dune_pthread_create(tf);
 
-	if (ARG1(tf) == 0)
-		t.rip = 0; /* fork */
-	else
-		memcpy(&t, tf, sizeof(t)); /* thread */
+	fs = dune_get_user_fs();
 
-	ptr = &t;
-
-	if (!sp)
-		asm volatile ("movq %%rsp, %0" : "=a" (sp));
-
-	/* XXX check stack */
-	x = (unsigned long*) (sp - 80);
-	*x = (unsigned long) ptr;
-
-        asm volatile(
-		     "movq %7,-80(%%rsp)\n\t"
-		     "movq %2, %%rdi \n\t"
-                     "movq %3, %%rsi \n\t"
-                     "movq %4, %%rdx \n\t"
-                     "movq %5, %%r10 \n\t"
-                     "movq %6, %%r8 \n\t"
-                     "vmcall \n\t"
-		     "testq %%rax,%%rax\n\t"
-		     "jz _thread_start\n\t"
-                     "movq %%rax, %0 \n\t" 
-		     "jmp _out\n\t"
-		     "_thread_start:\n\t"
-		     "movq %%rsp, %%rdi\n\t"
-		     "movq %%rax, %%rsi\n\t"
-		     "movq -80(%%rsp), %%rdx\n\t"
-		     "call thread_entry\n\t"
-		     "movq $0, %0\n\t"
-		     "_out:\n\t"
-		     : "=a" (rc) 
-                     : "a" (SYS_clone), "r" (ARG0(tf)), "r" (ARG1(tf)),
-                     "r" (ARG2(tf)), "r" (ARG3(tf)), "r" (ARG4(tf)), "r" (ptr)
-                     : "rdi", "rsi", "rdx", "r10",                                               
-                     "r8", "r9", "memory");
+	rc = syscall(SYS_clone, ARG0(tf), ARG1(tf), ARG2(tf), ARG3(tf),
+		     ARG4(tf));
 
 	if (rc < 0)
-		return rc;
+		return -errno;
+
+	if (rc == 0) {
+		dune_enter();
+		dune_set_user_fs(fs);
+	}
 
 	return rc;
 }

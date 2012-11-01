@@ -2,10 +2,16 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <err.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <asm/prctl.h>
+#include <sys/prctl.h>
 
 #define NUM_THREADS	10
 
 static int _threads_survived = 0;
+static unsigned long _tls;
 
 static void *xmalloc(size_t sz)
 {
@@ -63,8 +69,67 @@ static void test_thread_memory(void)
 		printf("FAILED\n");
 }
 
+static void *thread_pthread_fork(void *arg)
+{
+	pid_t pid;
+	unsigned long tls = 0;
+
+	_threads_survived++;
+
+        if (arch_prctl(ARCH_GET_FS, &tls) == -1)
+		err(1, "arch_prctl()");
+
+	if (tls == _tls) {
+		printf("FAILED\n");
+		return NULL;
+	}
+
+	_tls = tls;
+
+	if ((pid = fork()) == -1)
+		err(1, "fork()");
+
+	if (pid == 0) {
+		_threads_survived++;
+		
+		tls = 0;
+		if (arch_prctl(ARCH_GET_FS, &tls) == -1)
+			err(1, "arch_prctl()");
+
+		if (tls != _tls) {
+			printf("FAILED\n");
+			exit(0);
+		}
+
+		if (_threads_survived == 2)
+			printf("PASSED\n");
+
+		exit(0);
+	} else
+		wait(NULL);
+
+	return NULL;
+}
+
+static void test_pthread_fork(void)
+{
+	pthread_t pt;
+
+	printf("============ test_pthread_fork\n");
+
+	_threads_survived = 0;
+	arch_prctl(ARCH_GET_FS, &_tls);
+
+	if (pthread_create(&pt, NULL, thread_pthread_fork, NULL))
+		err(1, "pthread_create()");
+
+	if (pthread_join(pt, NULL))
+		err(1, "pthread_join()");
+}
+
 int main(int argc, char *argv[])
 {
 	test_thread_memory();
+	test_pthread_fork();
 	exit(0);
 }
