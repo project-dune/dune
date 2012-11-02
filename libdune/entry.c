@@ -404,7 +404,12 @@ static void map_stack(void)
  * 
  * Returns 0 on success, otherwise failure.
  */
-int dune_enter(void)
+int dune_enter()
+{
+	return dune_enter_fork(0);
+}
+
+int dune_enter_fork(uint64_t gs)
 {
 	struct dune_percpu *percpu = NULL;
 	struct dune_config conf;
@@ -416,9 +421,10 @@ int dune_enter(void)
 		return -errno;
 	}
 
-	/* XXX optimize - on fork, use parent's percpu */
-
-	percpu = setup_percpu();
+	if (gs)
+		percpu = (struct dune_percpu*) gs;
+	else
+		percpu = setup_percpu();
 
 	map_stack();
 

@@ -324,7 +324,8 @@ extern int dune_init(bool map_full);
 /**
  * Actually starts the dune process.  This must be done per-thread.
  */
-extern int dune_enter(void);
+extern int dune_enter();
+extern int dune_enter_fork(uint64_t gs);
 
 /**
  * dune_init_and_enter - initializes libdune and enters "Dune mode"

@@ -34,6 +34,7 @@
 
 #include "sandbox.h"
 #include "boxer.h"
+#include "libdune/cpu-x86.h"
 
 struct thread_arg {
 	pthread_cond_t	ta_cnd;
@@ -216,6 +217,9 @@ static long dune_clone(struct dune_tf *tf)
 {
 	unsigned long fs;
 	int rc;
+	unsigned long pc;
+
+	rdmsrl(MSR_GS_BASE, pc);
 
 	if (ARG1(tf) != 0)
 		return dune_pthread_create(tf);
@@ -229,7 +233,7 @@ static long dune_clone(struct dune_tf *tf)
 		return -errno;
 
 	if (rc == 0) {
-		dune_enter();
+		dune_enter_fork(pc);
 		dune_set_user_fs(fs);
 	}
 
