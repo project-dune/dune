@@ -136,9 +136,9 @@ static void __dune_boot(struct dune_percpu *percpu)
 		// STEP 3: long jump into the new code segment
 		"mov $" __str(GD_KT) ", %%rax\n"
 		"pushq %%rax\n"
-		"pushq $.flush\n"
+		"pushq $1f\n"
 		"lretq\n"
-		".flush:\n"
+		"1:\n"
 		"nop\n"
 
 		// STEP 4: load the task register (for safe stack switching)
