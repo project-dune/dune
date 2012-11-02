@@ -67,7 +67,7 @@ void dune_set_user_fs(unsigned long fs_base)
 	     [ufs_base]"i"(offsetof(struct dune_percpu, ufs_base)));
 }
 
-void dune_map_ptr(void *p, int len)
+static void map_ptr(void *p, int len)
 {
 	unsigned long page = PGADDR(p);
 	unsigned long page_end = PGADDR((char*) p + len);
@@ -89,7 +89,7 @@ static int setup_safe_stack(struct dune_percpu *percpu)
 	if (safe_stack == MAP_FAILED)
 		return -ENOMEM;
 
-	dune_map_ptr(safe_stack, PGSIZE);
+	map_ptr(safe_stack, PGSIZE);
 
 	safe_stack += PGSIZE;
 	percpu->tss.tss_iomb = offsetof(struct Tss, tss_iopb);
@@ -194,10 +194,9 @@ static void setup_idt(void)
 		case T_BRKPT:
 			id->type |= IDTD_CPL3;
 			/* fallthrough */
-		case T_DBLFLT: /* XXX double fault should have its own stack */
+		case T_DBLFLT:
 		case T_NMI:
 		case T_MCHK:
-		case T_PGFLT:
 			id->ist = 1;
 			break;
 		}
@@ -360,7 +359,7 @@ struct dune_percpu *setup_percpu(void)
 	if (percpu == MAP_FAILED)
 		return NULL;
 
-	dune_map_ptr(percpu, sizeof(*percpu));
+	map_ptr(percpu, sizeof(*percpu));
 
         percpu->kfs_base = fs_base;
 	percpu->ufs_base = fs_base;
@@ -380,6 +379,21 @@ static void free_percpu(struct dune_percpu *percpu)
 {
 	/* XXX free stack */
 	munmap(percpu, PGSIZE);
+}
+
+static void map_stack_cb(const struct dune_procmap_entry *e)
+{
+	unsigned long esp;
+
+	asm ("mov %%rsp, %0" : "=r" (esp));
+
+	if (esp >= e->begin && esp < e->end)
+		map_ptr((void*) e->begin, e->end - e->begin);
+}
+
+static void map_stack(void)
+{
+	dune_procmap_iterate(map_stack_cb);
 }
 
 /**
@@ -405,6 +419,8 @@ int dune_enter(void)
 	/* XXX optimize - on fork, use parent's percpu */
 
 	percpu = setup_percpu();
+
+	map_stack();
 
 	conf.rip = (__u64) &__dune_ret;
 	conf.rsp = 0;

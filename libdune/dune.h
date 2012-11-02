@@ -250,7 +250,6 @@ enum {
 extern int dune_vm_mprotect(ptent_t *root, void *va, size_t len, int perm);
 extern int dune_vm_map_phys(ptent_t *root, void *va, size_t len, void *pa, int perm);
 extern int dune_vm_map_pages(ptent_t *root, void *va, size_t len, int perm);
-extern void dune_map_ptr(void *ptr, int len);
 extern void dune_vm_unmap(ptent_t *root, void *va, size_t len);
 extern int dune_vm_lookup(ptent_t *root, void *va, int create, ptent_t **pte_out);
 

@@ -10,6 +10,8 @@
 
 #define NUM_THREADS	10
 
+extern int arch_prctl(int code, unsigned long *addr);
+
 static int _threads_survived = 0;
 static unsigned long _tls;
 

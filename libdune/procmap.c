@@ -61,13 +61,12 @@ static int get_type(const char *path)
 		return PROCMAP_TYPE_ANONYMOUS;
 	if (strcmp(path, "[heap]") == 0)
 		return PROCMAP_TYPE_HEAP;
-	if (strcmp(path, "[stack]") == 0)
+	if (strncmp(path, "[stack", 6) == 0)
 		return PROCMAP_TYPE_STACK;
 	if (strcmp(path, "[vsyscall]") == 0)
 		return PROCMAP_TYPE_VSYSCALL;
 	if (strcmp(path, "[vdso]") == 0)
 		return PROCMAP_TYPE_VDSO;
-	assert(false);
 	return PROCMAP_TYPE_UNKNOWN;
 }
 
