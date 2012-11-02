@@ -85,6 +85,9 @@ void dune_procmap_iterate(dune_procmap_cb cb)
 		printf("Could not open /proc/self/maps!\n");
 		abort();
 	}
+
+	setvbuf(map, NULL, _IOFBF, 8192);
+
 	while (!feof(map)) {
 		path[0] = '\0';
 		if (fgets(line, 512, map) == NULL)
