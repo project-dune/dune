@@ -257,7 +257,9 @@ __dune_syscall:
 	sti
 	movq	%rsp, %rdi /* argument 0 */
 	lea	dune_syscall_handler, %rax
+	subq	$8, %rsp
 	call	*%rax
+	addq	$8, %rsp
 
 	/* next restore the CPL3 FS base address */
 	SET_G3_FS_BASE
