@@ -146,6 +146,7 @@ void dune_trap_handler(int num, struct dune_tf *tf)
 			dune_printf("unhandled page fault %lx %lx\n",
 				   read_cr2(), tf->err);
 			dune_dump_trap_frame(tf);
+			dune_procmap_dump();
 			dune_die();
 		}
 		break;
