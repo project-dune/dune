@@ -17,6 +17,8 @@
 #include <err.h>
 #include <signal.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #include "../kern/dune.h"
 #include "dune.h"
@@ -52,6 +54,13 @@ struct dune_percpu {
 	struct Tss tss;
 	uint64_t gdt[NR_GDT_ENTRIES];
 } __attribute__((packed));
+
+struct dynsym {
+	char		*ds_name;
+	int		ds_idx;
+	int		ds_off;
+	struct dynsym	*ds_next;
+};
 
 unsigned long dune_get_user_fs(void)
 {
@@ -254,6 +263,146 @@ static void setup_vsyscall(void)
 	*pte = PTE_ADDR(dune_va_to_pa(&__dune_vsyscall_page)) | PTE_P | PTE_U;
 }
 
+static void *xmalloc(size_t sz)
+{
+	void *x = malloc(sz);
+
+	if (!x)
+		err(1, "malloc()");
+
+	memset(x, 0, sz);
+
+	return x;
+}
+
+static int vdso_sh_cb(struct dune_elf *elf, const char *sname,
+                      int snum, Elf64_Shdr *shdr)
+{
+	assert(elf->mem);
+
+	if (shdr->sh_type == SHT_STRTAB && strcmp(sname, ".dynstr") == 0) {
+		char *p = (char*) (elf->mem + shdr->sh_offset);
+		struct dynsym *ds = elf->priv;
+
+		while ((ds = ds->ds_next))
+			ds->ds_name = p + ds->ds_idx;
+	} else if (shdr->sh_type == SHT_DYNSYM) {
+		Elf64_Sym *s;
+		int len;
+
+		len = shdr->sh_size;
+		s   = (Elf64_Sym*) (elf->mem + shdr->sh_offset);
+
+		while (len >= sizeof(*s)) {
+			if (s->st_value) {
+				struct dynsym *head = elf->priv;
+				struct dynsym *ds = xmalloc(sizeof(*ds));
+
+				ds->ds_idx = s->st_name;
+				ds->ds_off = s->st_value & 0xFFF;
+
+				ds->ds_next = head->ds_next;
+				head->ds_next = ds;
+			}
+			s++;
+			len -= sizeof(*s);
+		}
+	}
+
+	return 0;
+}
+
+static void do_vdso(void *addr, char *name)
+{
+	int sysno = -1;
+	void *p;
+	int len;
+	uint32_t *i;
+
+	extern void _vdso_start(void);
+	extern void _vdso_end(void);
+
+//	printf("VDSO %p %s\n", addr, name);
+
+	if (strcmp(name, "__vdso_time") == 0
+	    || strcmp(name, "time") == 0) {
+		sysno = SYS_time;
+	} else if (strcmp(name, "__vdso_clock_gettime") == 0
+		   || strcmp(name, "clock_gettime") == 0) {
+		sysno = SYS_clock_gettime;
+	} else if (strcmp(name, "getcpu") == 0
+		|| strcmp(name, "__vdso_getcpu") == 0) {
+		sysno = SYS_getcpu;
+	} else if (strcmp(name, "gettimeofday") == 0
+		   || strcmp(name, "__vdso_gettimeofday") == 0) {
+		sysno = SYS_gettimeofday;
+	} else {
+		printf("Unknown VDSO syscall %s\n", name);
+		return;
+	}
+
+	asm("jmp _vdso_end\n"
+	    "_vdso_start:\n"
+	    "mov $0xAAAA, %rax\n"
+	    "syscall\n"
+	    "ret\n"
+	    "_vdso_end:\n");
+
+	p = (unsigned char*) _vdso_start;
+	len = (unsigned long) _vdso_end - (unsigned long) _vdso_start;
+
+	memcpy(addr, p, len);
+
+	i = (uint32_t*) (addr + 3);
+	if (*i != 0xaaaa)
+		err(1, "bad instruction");
+
+	*i = sysno;
+}
+
+static void setup_vdso(void *addr)
+{
+	struct dune_elf elf;
+	struct dynsym *ds, *d;
+	unsigned char *vdso;
+	ptent_t *pte;
+
+	memset(&elf, 0, sizeof(elf));
+
+	ds = xmalloc(sizeof(*ds));
+	elf.priv = ds;
+
+	if (dune_elf_open_mem(&elf, addr, PGSIZE))
+		err(1, "dune_elf_open_mem()");
+
+	if (elf.hdr.e_type != ET_DYN)
+		err(1, "bad elf");
+
+	dune_elf_iter_sh(&elf, vdso_sh_cb);
+
+	vdso = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
+		    MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	if (vdso == MAP_FAILED)
+		err(1, "mmap()");
+
+	memcpy(vdso, addr, PGSIZE);
+
+	dune_vm_lookup(pgroot, addr, 1, &pte);
+	*pte = PTE_ADDR(dune_va_to_pa(vdso)) | PTE_P | PTE_U;
+
+	while ((d = ds->ds_next)) {
+		if (d->ds_name[0])
+			do_vdso(vdso + d->ds_off, d->ds_name);
+
+		ds = d;
+		free(d);
+	}
+
+	free(elf.priv);
+
+	mprotect(vdso, PGSIZE, PROT_READ | PROT_EXEC);
+}
+
 static void __setup_mappings_cb(const struct dune_procmap_entry *ent)
 {
 	int perm = PERM_NONE;
@@ -265,6 +414,11 @@ static void __setup_mappings_cb(const struct dune_procmap_entry *ent)
 	
 	if (ent->begin == (unsigned long) VSYSCALL_ADDR) {
 		setup_vsyscall();
+		return;
+	}
+
+	if (ent->type == PROCMAP_TYPE_VDSO) {
+		setup_vdso((void*) ent->begin);
 		return;
 	}
 

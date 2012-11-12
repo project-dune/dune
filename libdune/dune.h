@@ -295,10 +295,13 @@ extern void dune_procmap_dump();
 
 struct dune_elf {
 	int		fd;
+	unsigned char	*mem;
+	int		len;
 	Elf64_Ehdr	hdr;
 	Elf64_Phdr	*phdr;
 	Elf64_Shdr	*shdr;
 	char		*shdrstr;
+	void		*priv;
 };
 
 typedef int (*dune_elf_phcb)(struct dune_elf *elf, Elf64_Phdr *phdr);
@@ -306,6 +309,7 @@ typedef int (*dune_elf_shcb)(struct dune_elf *elf, const char *sname,
 		                     int snum, Elf64_Shdr *shdr);
 
 extern int dune_elf_open(struct dune_elf *elf, const char *path);
+extern int dune_elf_open_mem(struct dune_elf *elf, void *mem, int len);
 extern int dune_elf_close(struct dune_elf *elf);
 extern int dune_elf_dump(struct dune_elf *elf);
 extern int dune_elf_iter_sh(struct dune_elf *elf, dune_elf_shcb cb);

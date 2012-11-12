@@ -11,9 +11,29 @@
 #include "dune.h"
 #include "elf.h"
 
-#define MAX_SNAME 20
+#define MAX_SNAME 40
 #define MAX_SHNUM 100
 #define MAX_PHNUM 40
+
+static int elf_read(struct dune_elf *elf, void *dst, int len, int off)
+{
+	int rd;
+
+	if (elf->mem == NULL)
+		return pread(elf->fd, dst, len, off);
+		
+	rd = elf->len - off;
+	
+	if (rd <= 0)
+		return 0;
+
+	if (len < rd)
+		rd = len;
+
+	memcpy(dst, &elf->mem[off], rd);
+
+	return rd;
+}
 
 /**
  * dune_elf_load_ph - a utility function to map a .LOAD region into program memory
@@ -157,7 +177,7 @@ static int elf_open_shs(struct dune_elf *elf)
 	if (!shdr)
 		return -ENOMEM;
 
-	ret = pread(elf->fd, (void *) shdr, len, elf->hdr.e_shoff);
+	ret = elf_read(elf, (void *) shdr, len, elf->hdr.e_shoff);
 	if (ret != len) {
 		printf("elf: failed to read section header table\n");
 		free(shdr);
@@ -180,7 +200,7 @@ static int elf_open_shs(struct dune_elf *elf)
 		free(shdr);
 		return -ENOMEM;
 	}
-	ret = pread(elf->fd, (void *) strtab, strtablen,
+	ret = elf_read(elf, (void *) strtab, strtablen,
 			    shdr[elf->hdr.e_shstrndx].sh_offset);
 	if (ret != strtablen) {
 		printf("elf: failed to read section header string table\n");
@@ -230,25 +250,12 @@ int dune_elf_iter_sh(struct dune_elf *elf, dune_elf_shcb cb)
 	return 0;
 }
 
-/**
- * dune_elf_open - Open an elf binary
- * @elf: dune_elf object
- * @path: file path to the elf object
- *
- * Returns: 0 on success, otherwise failure.
- */
-int dune_elf_open(struct dune_elf *elf, const char *path)
+static int do_elf_open(struct dune_elf *elf)
 {
 	Elf64_Ehdr hdr;
-	int fd, ret;
+	int ret;
 
-	fd = open(path, O_RDONLY);
-	if (fd <= 0) {
-		printf("elf: unable to open '%s'\n", path);
-		return -EIO;
-	}
-
-	ret = read(fd, (void *) &hdr, sizeof(Elf64_Ehdr));
+	ret = elf_read(elf, (void *) &hdr, sizeof(Elf64_Ehdr), 0);
 	if (ret != sizeof(Elf64_Ehdr)) {
 		printf("elf: failed to read header\n");
 		ret = -EIO;
@@ -274,7 +281,6 @@ int dune_elf_open(struct dune_elf *elf, const char *path)
 		goto out;
 	}
 
-	elf->fd = fd;
 	elf->hdr = hdr;
 	elf->phdr = NULL;
 	elf->shdr = NULL;
@@ -282,8 +288,41 @@ int dune_elf_open(struct dune_elf *elf, const char *path)
 	return 0;
 
 out:
-	close(fd);
+	dune_elf_close(elf);
 	return ret;
+}
+
+/**
+ * dune_elf_open - Open an elf binary
+ * @elf: dune_elf object
+ * @path: file path to the elf object
+ *
+ * Returns: 0 on success, otherwise failure.
+ */
+int dune_elf_open(struct dune_elf *elf, const char *path)
+{
+	int fd;
+
+	fd = open(path, O_RDONLY);
+	if (fd <= 0) {
+		printf("elf: unable to open '%s'\n", path);
+		return -EIO;
+	}
+
+	elf->fd  = fd;
+	elf->mem = NULL;
+	elf->len = 0;
+
+	return do_elf_open(elf);
+}
+
+int dune_elf_open_mem(struct dune_elf *elf, void *mem, int len)
+{
+	elf->fd  = -1;
+	elf->mem = mem;
+	elf->len = len;
+
+	return do_elf_open(elf);
 }
 
 /**
@@ -304,7 +343,9 @@ int dune_elf_close(struct dune_elf *elf)
 		free(elf->shdrstr);
 		elf->shdrstr = NULL;
 	}
-	close(elf->fd);
+
+	if (elf->mem == NULL)
+		close(elf->fd);
 
 	return 0;
 }
