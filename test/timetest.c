@@ -16,18 +16,18 @@ int main(int argc, char *argv[])
 
 	t = time(&t);
 	if (t == -1) {
-		printf("Error calling time(&t)!");
+		printf("Error calling time(&t)!\n");
 		return 1;
 	}
 
 	t = -1;
 	t = time(NULL);
 	if (t == -1) {
-		printf("Error calling time(NULL)!");
+		printf("Error calling time(NULL)!\n");
 		return 1;
 	}
 
-	printf("Success!");
+	printf("Success!\n");
 	return 0;
 }
 
