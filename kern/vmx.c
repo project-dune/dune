@@ -1700,7 +1700,7 @@ failed1:
 /**
  * vmx_exit - the main removal routine for this driver
  */
-__exit void vmx_exit(void)
+void vmx_exit(void)
 {
 	on_each_cpu(vmx_disable, NULL, 1);
 	vmx_free_vmxon_areas();
