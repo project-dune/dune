@@ -233,7 +233,7 @@ static long dune_clone(struct dune_tf *tf)
 		return -errno;
 
 	if (rc == 0) {
-		dune_enter_fork(pc);
+		dune_enter();
 		dune_set_user_fs(fs);
 	}
 

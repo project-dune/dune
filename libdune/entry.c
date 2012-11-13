@@ -55,6 +55,8 @@ struct dune_percpu {
 	uint64_t gdt[NR_GDT_ENTRIES];
 } __attribute__((packed));
 
+static __thread struct dune_percpu *lpercpu;
+
 struct dynsym {
 	char		*ds_name;
 	int		ds_idx;
@@ -122,9 +124,15 @@ static void setup_gdt(struct dune_percpu *percpu)
 	percpu->gdt[GD_TSS2 >> 3] = SEG_BASEHI(&percpu->tss);
 }
 
-static void __dune_boot(struct dune_percpu *percpu)
+/**
+ * dune_boot - Brings the user-level OS online
+ * @percpu: the thread-local data
+ */
+static int dune_boot(struct dune_percpu *percpu)
 {
 	struct tptr _idtr, _gdtr;
+
+	setup_gdt(percpu);
 
 	_gdtr.base  = (uint64_t) &percpu->gdt;
 	_gdtr.limit = sizeof(percpu->gdt) - 1;
@@ -163,15 +171,6 @@ static void __dune_boot(struct dune_percpu *percpu)
 	// STEP 6: FS and GS require special initialization on 64-bit
 	wrmsrl(MSR_FS_BASE, percpu->kfs_base);
 	wrmsrl(MSR_GS_BASE, (unsigned long) percpu);
-}
-
-/**
- * dune_boot - Brings the user-level OS online
- */
-static int dune_boot(struct dune_percpu *percpu)
-{
-	setup_gdt(percpu);
-	__dune_boot(percpu);
 
 	return 0;
 }
@@ -506,7 +505,7 @@ static int setup_mappings(bool full)
 	return ret;
 }
 
-struct dune_percpu *setup_percpu(void)
+static struct dune_percpu *create_percpu(void)
 {
 	struct dune_percpu *percpu;
 	int ret;
@@ -533,8 +532,6 @@ struct dune_percpu *setup_percpu(void)
 		return NULL;
 	}
 
-	setup_gdt(percpu);
-
 	return percpu;
 }
 
@@ -559,35 +556,10 @@ static void map_stack(void)
 	dune_procmap_iterate(map_stack_cb);
 }
 
-/**
- * dune_enter - transitions a process to "Dune mode"
- * 
- * Must be called within each forked child and/or each new thread
- * if you want to remain in "Dune mode".
- * 
- * Returns 0 on success, otherwise failure.
- */
-int dune_enter()
+static int do_dune_enter(struct dune_percpu *percpu)
 {
-	return dune_enter_fork(0);
-}
-
-int dune_enter_fork(uint64_t gs)
-{
-	struct dune_percpu *percpu = NULL;
 	struct dune_config conf;
-	uint64_t arch_fs;
 	int ret;
-
-	if (arch_prctl(ARCH_GET_FS, &arch_fs) == -1) {
-		printf("dune: failed to get FS register\n");
-		return -errno;
-	}
-
-	if (gs)
-		percpu = (struct dune_percpu*) gs;
-	else
-		percpu = setup_percpu();
 
 	map_stack();
 
@@ -598,7 +570,7 @@ int dune_enter_fork(uint64_t gs)
 	ret = __dune_enter(dune_fd, &conf);
 	if (ret) {
 		printf("dune: entry to Dune mode failed\n");
-		goto fail_enter;
+		return -EIO;
 	}
 
 	ret = dune_boot(percpu);
@@ -608,10 +580,40 @@ int dune_enter_fork(uint64_t gs)
 	}
 
 	return 0;
+}
 
-fail_enter:
-	free_percpu(percpu);
-	return ret;
+/**
+ * dune_enter - transitions a process to "Dune mode"
+ *
+ * Can only be called after dune_init().
+ * 
+ * Use this function in each forked child and/or each new thread
+ * if you want to re-enter "Dune mode".
+ * 
+ * Returns 0 on success, otherwise failure.
+ */
+int dune_enter(void)
+{
+	struct dune_percpu *percpu;
+	int ret;
+
+	// check if this process already entered Dune before a fork...
+	if (lpercpu)
+		return do_dune_enter(lpercpu);
+
+	percpu = create_percpu();
+	if (!percpu)
+		return -ENOMEM;
+
+	ret = do_dune_enter(percpu);
+
+	if (ret) {
+		free_percpu(percpu);
+		return ret;
+	}
+
+	lpercpu = percpu;
+	return 0;
 }
 
 /**
@@ -620,12 +622,12 @@ fail_enter:
  * @map_full: determines if the full process address space should be mapped
  * 
  * Call this function once before using libdune.
- * 
- * Full mappings are typically used for testing and debugging. When
- * disabled, a much more efficient approach where only address ranges
- * mapped into memory are reflected in the guest page table. However,
- * this introduces an additional challenge in that any changes to
- * the process address space require an update to the page table.
+ *
+ * Dune supports two memory modes. If map_full is true, then every possible
+ * address in the process address space is mapped. Otherwise, only addresses
+ * that are used (e.g. set up through mmap) are mapped. Full mapping consumes
+ * a lot of memory when enabled, but disabling it incurs slight overhead
+ * since pages will occasionally need to be faulted in.
  * 
  * Returns 0 on success, otherwise failure.
  */
