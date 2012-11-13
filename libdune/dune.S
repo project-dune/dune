@@ -48,6 +48,7 @@
 
 #define EF_START (128)
 #define TF_END	(168)
+#define TF_ALIGN (176)
 
 /*
  * Dune Config Format
@@ -257,9 +258,7 @@ __dune_syscall:
 	sti
 	movq	%rsp, %rdi /* argument 0 */
 	lea	dune_syscall_handler, %rax
-	subq	$8, %rsp
 	call	*%rax
-	addq	$8, %rsp
 
 	/* next restore the CPL3 FS base address */
 	SET_G3_FS_BASE
@@ -292,7 +291,7 @@ dune_pop_trap_frame:
 
 .globl dune_jump_to_user
 dune_jump_to_user:
-	subq	$TF_END, %rsp
+	subq	$TF_ALIGN, %rsp
 
 	/* save the full register state */
 	SAVE_REGS
@@ -331,7 +330,7 @@ dune_ret_from_user:
 	jmp	dune_pop_trap_frame
 
 dune_ret_from_user_finish:
-	addq	$TF_END, %rsp
+	addq	$TF_ALIGN, %rsp
 	ret
 
 .globl __dune_intr
