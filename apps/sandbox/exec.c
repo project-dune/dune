@@ -51,7 +51,7 @@ exec_execev(const char *filename, char *const argv[], char *const envp[])
     if (page[0] == 0x7f && page[1] == 'E' && page[2] == 'L'&& page[3] == 'F') {
         int i;
         int arglen = getlen(argv);
-        const char **new_argv = (const char **)malloc(sizeof(char *)*(arglen+3));
+        const char **new_argv = (const char **)malloc(sizeof(char *)*(arglen+4));
 
         //printf("ELF!\n");
 
@@ -82,7 +82,7 @@ exec_execev(const char *filename, char *const argv[], char *const envp[])
         bool no_args;
         int i;
         int arglen = getlen(argv);
-        const char **new_argv = (const char **)malloc(sizeof(char *)*(arglen+6));
+        const char **new_argv = (const char **)malloc(sizeof(char *)*(arglen+7));
 
         //printf("SHELL!\n");
 
