@@ -222,7 +222,11 @@ setup_arguments(uintptr_t sp, const char *path,
 
 	// determine argument pointer
 	len += (argc + envc + 4) * sizeof(uintptr_t);
-	len = (len + sizeof(uintptr_t)) & ~(sizeof(uintptr_t) - 1);
+
+	// The System V AMD64 ABI requires 16-byte stack alignment. We go
+	// with 32-bytes to be extra conservative (e.g. in case of AVX)
+	len = (len + 0x1f) & ~0x1f;
+
 	arg_ptr = (uintptr_t *) (sp - len);
 	*arg_ptr = argc + 1;
 	arg_ptr++;
