@@ -59,6 +59,7 @@
 
 #include "dune.h"
 #include "vmx.h"
+#include "compat.h"
 
 static atomic_t vmx_enable_failed;
 
@@ -509,7 +510,13 @@ static void vmx_setup_constant_host_state(void)
 	unsigned long tmpl;
 	struct desc_ptr dt;
 
-	vmcs_writel(HOST_CR0, read_cr0() | X86_CR0_TS);  /* 22.2.3 */
+	/*
+	 * Eager FPU always has the CR0.TS bit clear.
+	 */
+	if (use_eager_fpu())
+		vmcs_writel(HOST_CR0, read_cr0());  /* 22.2.3 */
+	else
+		vmcs_writel(HOST_CR0, read_cr0() | X86_CR0_TS);  /* 22.2.3 */
 	vmcs_writel(HOST_CR4, read_cr4());  /* 22.2.3, 22.2.5 */
 	vmcs_writel(HOST_CR3, read_cr3());  /* 22.2.3 */
 
