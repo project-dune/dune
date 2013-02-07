@@ -65,7 +65,6 @@
 
 #include "dune.h"
 #include "vmx.h"
-#include "compat.h"
 
 static atomic_t vmx_enable_failed;
 
