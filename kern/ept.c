@@ -456,12 +456,15 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 					unsigned long address,
 					pte_t pte)
 {
-	int ret;
 	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
+
+	pr_debug("ept: change_pte addr %lx flags %lx\n", address, pte_flags(pte));
+
+#if 0
+	int ret;
 	unsigned long gpa = hva_to_gpa(vcpu, mm, (unsigned long) address);
 	int make_write = (pte_flags(pte) & _PAGE_RW) ? 1 : 0;
 
-	pr_debug("ept: change_pte addr %lx flags %lx\n", address, pte_flags(pte));
 
 	if (gpa == GPA_ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", address);
@@ -473,6 +476,15 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
 	else
 		printk(KERN_ERR "ept: ept_set_epte failed\n");
+#endif
+
+	/*
+	 * NOTE: Work around for recent linux kernels (seen on 3.7 at least).
+	 * They seem to hold a lock while calling this notifier, making it
+	 * impossible to call get_user_pages_fast(). As a result, we just
+	 * drop the page, and catch it later with a fault.
+	 */
+	ept_invalidate_page(vcpu, mm, address);
 }
 
 static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
