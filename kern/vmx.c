@@ -51,11 +51,17 @@
 #include <linux/smp.h>
 #include <linux/percpu.h>
 #include <linux/syscalls.h>
+#include <linux/version.h>
 
 #include <asm/desc.h>
 #include <asm/vmx.h>
 #include <asm/unistd_64.h>
 #include <asm/virtext.h>
+#include <asm/i387.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+#include <asm/fpu-internal.h>
+#endif
 
 #include "dune.h"
 #include "vmx.h"
@@ -510,13 +516,7 @@ static void vmx_setup_constant_host_state(void)
 	unsigned long tmpl;
 	struct desc_ptr dt;
 
-	/*
-	 * Eager FPU always has the CR0.TS bit clear.
-	 */
-	if (use_eager_fpu())
-		vmcs_writel(HOST_CR0, read_cr0());  /* 22.2.3 */
-	else
-		vmcs_writel(HOST_CR0, read_cr0() | X86_CR0_TS);  /* 22.2.3 */
+	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS);  /* 22.2.3 */
 	vmcs_writel(HOST_CR4, read_cr4());  /* 22.2.3, 22.2.5 */
 	vmcs_writel(HOST_CR3, read_cr3());  /* 22.2.3 */
 
@@ -1463,6 +1463,17 @@ int vmx_launch(struct dune_config *conf)
 
 	while (1) {
 		vmx_get_cpu(vcpu);
+
+		/*
+		 * We assume that a Dune process will always use
+		 * the FPU whenever it is entered, and thus we go
+		 * ahead and load FPU state here. The reason is
+		 * that we don't monitor or trap FPU usage inside
+		 * a Dune process.
+		 */
+		if (!__thread_has_fpu(current))
+			math_state_restore();
+
 		local_irq_disable();
 
 		if (need_resched()) {
