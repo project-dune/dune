@@ -59,7 +59,7 @@
 #include <asm/virtext.h>
 #include <asm/i387.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
 #include <asm/fpu-internal.h>
 #endif
 
