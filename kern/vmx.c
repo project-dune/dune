@@ -63,6 +63,11 @@
 #include <asm/fpu-internal.h>
 #endif
 
+#if !defined(VMX_EPT_AD_BIT)
+#define VMX_EPT_AD_BIT		(1ull << 21)
+#define VMX_EPT_AD_ENABLE_BIT	(1ull << 6)
+#endif
+
 #include "dune.h"
 #include "vmx.h"
 
@@ -137,6 +142,11 @@ static inline bool cpu_has_vmx_invept_context(void)
 static inline bool cpu_has_vmx_invept_global(void)
 {
 	return vmx_capability.ept & VMX_EPT_EXTENT_GLOBAL_BIT;
+}
+
+static inline bool cpu_has_vmx_ept_ad_bits(void)
+{
+	return vmx_capability.ept & VMX_EPT_AD_BIT;
 }
 
 static inline void __invept(int ext, u64 eptp, gpa_t gpa)
@@ -680,6 +690,19 @@ static void __vmx_sync_helper(void *ptr)
 	ept_sync_context(vcpu->eptp);
 }
 
+struct sync_addr_args {
+	struct vmx_vcpu *vcpu;
+	gpa_t gpa;
+};
+
+static void __vmx_sync_individual_addr_helper(void *ptr)
+{
+	struct sync_addr_args *args = ptr;
+
+	ept_sync_individual_addr(args->vcpu->eptp,
+				 (args->gpa & ~(PAGE_SIZE - 1)));
+}
+
 /**
  * vmx_ept_sync_global - used to evict everything in the EPT
  * @vcpu: the vcpu
@@ -697,9 +720,12 @@ void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu)
  */
 void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
 {
-	//ept_sync_individual_addr(vcpu->eptp, (gpa & ~(PAGE_SIZE - 1)));
+	struct sync_addr_args args;
+	args.vcpu = vcpu;
+	args.gpa = gpa;
+
 	smp_call_function_single(vcpu->cpu,
-		__vmx_sync_helper, (void *) vcpu, 1);
+		__vmx_sync_individual_addr_helper, (void *) &args, 1);
 }
 
 /**
@@ -746,6 +772,8 @@ static u64 construct_eptp(unsigned long root_hpa)
 	/* TODO write the value reading from MSR */
 	eptp = VMX_EPT_DEFAULT_MT |
 		VMX_EPT_DEFAULT_GAW << VMX_EPT_GAW_EPTP_SHIFT;
+	if (cpu_has_vmx_ept_ad_bits())
+		eptp |= VMX_EPT_AD_ENABLE_BIT;
 	eptp |= (root_hpa & PAGE_MASK);
 
 	return eptp;
@@ -1036,6 +1064,10 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vpid_sync_context(vcpu->vpid);
 	vmx_put_cpu(vcpu);
 
+	if (cpu_has_vmx_ept_ad_bits()) {
+		vcpu->ept_ad_enabled = true;
+		printk(KERN_INFO "vmx: enabled EPT A/D bits");
+	}
 	if (vmx_create_ept(vcpu))
 		goto fail_ept;
 

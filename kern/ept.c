@@ -73,6 +73,8 @@ typedef unsigned long epte_t;
 #define __EPTE_EXEC	0x04
 #define __EPTE_IPAT	0x40
 #define __EPTE_SZ	0x80
+#define __EPTE_A	0x100
+#define __EPTE_D	0x200
 #define __EPTE_TYPE(n)	(((n) & 0x7) << 3)
 
 enum {
@@ -306,6 +308,12 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 		__EPTE_TYPE(EPTE_TYPE_WB) | __EPTE_IPAT;
 	if (make_write)
 		flags |= __EPTE_WRITE;
+	if (vcpu->ept_ad_enabled) {
+		/* premark A/D to avoid extra memory references */
+		flags |= __EPTE_A;
+		if (make_write)
+			flags |= __EPTE_D;
+	}
 
 	if (PageHuge(page)) {
 		flags |= __EPTE_SZ;
@@ -375,16 +383,16 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 }
 
 /**
- * ept_check_page - determines if a page is mapped in the ept
+ * ept_check_page_mapped - determines if a page is mapped in the ept
  * @vcpu: the vcpu
  * @mm: the process's mm_struct
  * @addr: the address of the page
  * 
  * Returns 1 if the page is mapped, 0 otherwise
  */
-static int ept_check_page(struct vmx_vcpu *vcpu,
-			  struct mm_struct *mm,
-			  unsigned long addr)
+static int ept_check_page_mapped(struct vmx_vcpu *vcpu,
+				 struct mm_struct *mm,
+				 unsigned long addr)
 {
 	int ret;
 	epte_t *epte;
@@ -399,7 +407,48 @@ static int ept_check_page(struct vmx_vcpu *vcpu,
 	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 0, &epte);
 	spin_unlock(&vcpu->ept_lock);
 
-	return ret;
+	return !ret;
+}
+
+/**
+ * ept_check_page_accessed - determines if a page was accessed using AD bits
+ * @vcpu: the vcpu
+ * @mm: the process's mm_struct
+ * @addr: the address of the page
+ * @flush: if true, clear the A bit
+ * 
+ * Returns 1 if the page was accessed, 0 otherwise
+ */
+static int ept_check_page_accessed(struct vmx_vcpu *vcpu,
+				   struct mm_struct *mm,
+				   unsigned long addr,
+				   bool flush)
+{
+	int ret, accessed;
+	epte_t *epte;
+	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
+
+	if (gpa == (void *) GPA_ADDR_INVAL) {
+		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
+		return 0;
+	}
+
+	spin_lock(&vcpu->ept_lock);
+	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 0, &epte);
+	if (ret) {
+		spin_unlock(&vcpu->ept_lock);
+		return 0;
+	}
+
+	accessed = (*epte & __EPTE_A);
+	if (flush & accessed)
+		*epte = (*epte & ~__EPTE_A);
+	spin_unlock(&vcpu->ept_lock);
+
+	if (flush & accessed)
+		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
+
+	return accessed;
 }
 
 static inline struct vmx_vcpu *mmu_notifier_to_vmx(struct mmu_notifier *mn)
@@ -495,7 +544,10 @@ static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 
 	printk(KERN_INFO "ept: clear_flush_young addr %lx\n", address);
 
-	return ept_invalidate_page(vcpu, mm, address);
+	if (!vcpu->ept_ad_enabled)
+		return ept_invalidate_page(vcpu, mm, address);
+	else
+		return ept_check_page_accessed(vcpu, mm, address, true);
 }
 
 static int ept_mmu_notifier_test_young(struct mmu_notifier *mn,
@@ -506,7 +558,10 @@ static int ept_mmu_notifier_test_young(struct mmu_notifier *mn,
 
 	printk(KERN_INFO "ept: test_young addr %lx\n", address);
 
-	return ept_check_page(vcpu, mm, address);
+	if (!vcpu->ept_ad_enabled)
+		return ept_check_page_mapped(vcpu, mm, address);
+	else
+		return ept_check_page_accessed(vcpu, mm, address, false);
 }
 
 static void ept_mmu_notifier_release(struct mmu_notifier *mn,

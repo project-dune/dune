@@ -55,6 +55,7 @@ struct vmx_vcpu {
 	spinlock_t ept_lock;
 	unsigned long ept_root;
 	unsigned long eptp;
+	bool ept_ad_enabled;
 
 	u8  fail;
 	u64 exit_reason;
