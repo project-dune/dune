@@ -476,6 +476,7 @@ static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	int ret;
 	epte_t *epte;
 	unsigned long pos = start;
+	bool sync_needed = false;
 
 	pr_debug("ept: invalidate_range_start start %lx end %lx\n", start, end);
 
@@ -485,12 +486,14 @@ static void ept_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 		if (!ret) {
 			pos += epte_big(*epte) ? HUGE_PAGE_SIZE : PAGE_SIZE;
 			ept_clear_epte(epte);
+			sync_needed = true;
 		} else
 			pos += PAGE_SIZE;
 	}
 	spin_unlock(&vcpu->ept_lock);
 
-	vmx_ept_sync_vcpu(vcpu);
+	if (sync_needed)
+		vmx_ept_sync_vcpu(vcpu);
 }
 
 static void ept_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
