@@ -638,7 +638,6 @@ static void __vmx_get_cpu_helper(void *ptr)
 	struct vmx_vcpu *vcpu = ptr;
 
 	BUG_ON(raw_smp_processor_id() != vcpu->cpu);
-	ept_sync_context(vcpu->eptp);
 	vmcs_clear(vcpu->vmcs);
 	if (__get_cpu_var(local_vcpu) == vcpu)
 		__get_cpu_var(local_vcpu) = NULL;
@@ -663,6 +662,9 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 					__vmx_get_cpu_helper, (void *) vcpu, 1);
 			else
 				vmcs_clear(vcpu->vmcs);
+
+			vpid_sync_context(vcpu->vpid);
+			ept_sync_context(vcpu->eptp);
 
 			vcpu->launched = 0;
 			vmcs_load(vcpu->vmcs);
@@ -948,7 +950,6 @@ static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
 			     vmcs_config.cpu_based_2nd_exec_ctrl);
 	}
 
-	vcpu->eptp = construct_eptp(vcpu->ept_root);
 	vmcs_write64(EPT_POINTER, vcpu->eptp);
 
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
@@ -1057,11 +1058,11 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	spin_lock_init(&vcpu->ept_lock);
 	if (vmx_init_ept(vcpu))
 		goto fail_ept;
+	vcpu->eptp = construct_eptp(vcpu->ept_root);
 
 	vmx_get_cpu(vcpu);
 	vmx_setup_vmcs(vcpu);
 	vmx_setup_initial_guest_state(conf);
-	vpid_sync_context(vcpu->vpid);
 	vmx_put_cpu(vcpu);
 
 	if (cpu_has_vmx_ept_ad_bits()) {
@@ -1610,6 +1611,7 @@ static __init int __vmx_enable(struct vmcs *vmxon_buf)
 
 	__vmxon(phys_addr);
 	vpid_sync_vcpu_global();
+	ept_sync_global();
 
 	return 0;
 }
