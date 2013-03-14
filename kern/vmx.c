@@ -59,17 +59,9 @@
 #include <asm/virtext.h>
 #include <asm/i387.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
-#include <asm/fpu-internal.h>
-#endif
-
-#if !defined(VMX_EPT_AD_BIT)
-#define VMX_EPT_AD_BIT		(1ull << 21)
-#define VMX_EPT_AD_ENABLE_BIT	(1ull << 6)
-#endif
-
 #include "dune.h"
 #include "vmx.h"
+#include "compat.h"
 
 static atomic_t vmx_enable_failed;
 
