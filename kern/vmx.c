@@ -1460,7 +1460,11 @@ static void vmx_handle_cpuid(struct vmx_vcpu *vcpu)
 
 static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 {
-	u32 intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
+	u32 intr_info;
+
+	vmx_get_cpu(vcpu);
+	intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
+	vmx_put_cpu(vcpu);
 
 	printk(KERN_INFO "vmx: got an exception\n");
 	if ((intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR)
@@ -1542,15 +1546,6 @@ int vmx_launch(struct dune_config *conf)
 		if (ret == EXIT_REASON_VMCALL ||
 		    ret == EXIT_REASON_CPUID) {
 			vmx_step_instruction();
-		} else if (ret == EXIT_REASON_EXCEPTION_NMI) {
-			if (vmx_handle_nmi_exception(vcpu))
-				done = 1;
-		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT &&
-			   ret != EXIT_REASON_EPT_VIOLATION) {
-			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
-			       ret, vmcs_read32(EXIT_QUALIFICATION));
-			vmx_dump_cpu(vcpu);
-			done = 1;
 		}
 
 		vmx_put_cpu(vcpu);
@@ -1561,6 +1556,15 @@ int vmx_launch(struct dune_config *conf)
 			vmx_handle_cpuid(vcpu);
 		else if (ret == EXIT_REASON_EPT_VIOLATION)
 			done = vmx_handle_ept_violation(vcpu);
+		else if (ret == EXIT_REASON_EXCEPTION_NMI) {
+			if (vmx_handle_nmi_exception(vcpu))
+				done = 1;
+		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT) {
+			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
+			       ret, vmcs_read32(EXIT_QUALIFICATION));
+			vmx_dump_cpu(vcpu);
+			done = 1;
+		}
 
 		if (done || vcpu->shutdown)
 			break;
