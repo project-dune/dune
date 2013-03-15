@@ -1100,7 +1100,7 @@ static int dune_exit(int error_code)
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
 	vcpu->shutdown = 1;
-	vcpu->ret_code = ((error_code & 0xff) << 8);
+	vcpu->ret_code = error_code;
 
 	return 0;
 }
@@ -1117,7 +1117,7 @@ static int dune_exit_group(int error_code)
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
 	vcpu->shutdown = 1;
-	vcpu->ret_code = ((error_code & 0xff) << 8);
+	vcpu->ret_code = error_code;
 
 	return 0;
 }
@@ -1479,7 +1479,7 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
  * vmx_launch - the main loop for a VMX Dune process
  * @conf: the launch configuration
  */
-int vmx_launch(struct dune_config *conf)
+int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 {
 	int ret, done = 0;
 	struct vmx_vcpu *vcpu = vmx_create_vcpu(conf);
@@ -1573,10 +1573,9 @@ int vmx_launch(struct dune_config *conf)
 	printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n",
 	       vcpu->vpid);
 
-	ret = vcpu->ret_code;
+	*ret_code = vcpu->ret_code;
 	vmx_destroy_vcpu(vcpu);
 
-	do_exit(ret);
 	return 0;
 }
 

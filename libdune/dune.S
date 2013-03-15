@@ -57,6 +57,7 @@
 #define DUNE_CFG_RIP	(0)
 #define DUNE_CFG_RSP	(8)
 #define DUNE_CFG_CR3	(16)
+#define DUNE_CFG_RET	(24)
 
 /*
  * Supervisor Private Area Format
@@ -194,12 +195,15 @@ __dune_enter:
 	SAVE_REST
 	movq	%rsp, DUNE_CFG_RSP(%rsi)
 	movq	%rsi, %rdx
-	movq	$0x8018e901, %rsi /* XXX DUNE_ENTER */
-	movq	$16, %rax
+	movq	$0x8020e901, %rsi /* XXX DUNE_ENTER */
+	movq	$16, %rax /* __NR_ioctl */
 	syscall
 
-	/* should only make it here if entry fails */
-	jmp __dune_ret
+	cmpq	$0, %rax
+	jnz __dune_ret
+	movq	DUNE_CFG_RET(%rdx), %rdi
+	movq	$60, %rax /* __NR_exit */
+	syscall
 
 .globl	__dune_ret
 __dune_ret:

@@ -29,9 +29,9 @@
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("A driver for Dune");
 
-static int dune_enter(struct dune_config *conf)
+static int dune_enter(struct dune_config *conf, int64_t *ret)
 {
-	return vmx_launch(conf);
+	return vmx_launch(conf, ret);
 }
 
 static long dune_dev_ioctl(struct file *filp,
@@ -50,7 +50,16 @@ static long dune_dev_ioctl(struct file *filp,
 			goto out;
 		}
 
-		r = dune_enter(&conf);
+		r = dune_enter(&conf, &conf.ret);
+		if (r)
+			break;
+
+		r = copy_to_user((void __user *)arg, &conf,
+				 sizeof(struct dune_config));
+		if (r) {
+			r = -EIO;
+			goto out;
+		}
 		break;
 
 	case DUNE_GET_SYSCALL:

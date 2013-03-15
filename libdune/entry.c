@@ -569,7 +569,7 @@ static int do_dune_enter(struct dune_percpu *percpu)
 
 	ret = __dune_enter(dune_fd, &conf);
 	if (ret) {
-		printf("dune: entry to Dune mode failed\n");
+		printf("dune: entry to Dune mode failed, ret is %d\n", ret);
 		return -EIO;
 	}
 

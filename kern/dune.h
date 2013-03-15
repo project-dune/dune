@@ -22,6 +22,7 @@ struct dune_config {
 	__u64 rip;
 	__u64 rsp;
 	__u64 cr3;
+	__s64 ret;
 } __attribute__((packed));
 
 struct dune_layout {
