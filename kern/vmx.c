@@ -1627,7 +1627,6 @@ static __init void vmx_enable(void *unused)
 	if ((ret = __vmx_enable(vmxon_buf)))
 		goto failed;
 
-	//INIT_LIST_HEAD(&per_cpu(loaded_vmcss_on_cpu, cpu));
 	__get_cpu_var(vmx_enabled) = 1;
 	store_gdt(&__get_cpu_var(host_gdt));
 
@@ -1645,9 +1644,6 @@ failed:
  */
 static void vmx_disable(void *unused)
 {
-	/* FIXME: Need to call VMCLEAR on any launched VMCS's */
-	//vmclear_local_loaded_vmcss();
-
 	if (__get_cpu_var(vmx_enabled)) {
 		__vmxoff();
 		write_cr4(read_cr4() & ~X86_CR4_VMXE);
