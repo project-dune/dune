@@ -105,6 +105,12 @@ static inline bool cpu_has_vmx_vpid(void)
 		SECONDARY_EXEC_ENABLE_VPID;
 }
 
+static inline bool cpu_has_vmx_invpcid(void)
+{
+	return vmcs_config.cpu_based_2nd_exec_ctrl &
+		SECONDARY_EXEC_ENABLE_INVPCID;
+}
+
 static inline bool cpu_has_vmx_invvpid_single(void)
 {
 	return vmx_capability.vpid & VMX_VPID_EXTENT_SINGLE_CONTEXT_BIT;
@@ -391,13 +397,11 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 #endif
 	if (_cpu_based_exec_control & CPU_BASED_ACTIVATE_SECONDARY_CONTROLS) {
 		min2 = 0;
-		opt2 = //SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES |
-			SECONDARY_EXEC_WBINVD_EXITING |
+		opt2 =  SECONDARY_EXEC_WBINVD_EXITING |
 			SECONDARY_EXEC_ENABLE_VPID |
 			SECONDARY_EXEC_ENABLE_EPT |
-//			SECONDARY_EXEC_UNRESTRICTED_GUEST |
-//			SECONDARY_EXEC_PAUSE_LOOP_EXITING |
-			SECONDARY_EXEC_RDTSCP;
+			SECONDARY_EXEC_RDTSCP |
+			SECONDARY_EXEC_ENABLE_INVPCID;
 		if (adjust_vmx_controls(min2, opt2,
 					MSR_IA32_VMX_PROCBASED_CTLS2,
 					&_cpu_based_2nd_exec_control) < 0)
@@ -773,8 +777,6 @@ static u64 construct_eptp(unsigned long root_hpa)
 	return eptp;
 }
 
-#define X86_CR4_PCID	0x00020000 /* enable PCID support */
-
 /**
  * vmx_setup_initial_guest_state - configures the initial state of guest registers
  */
@@ -784,7 +786,7 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 	unsigned long cr4 = X86_CR4_PAE | X86_CR4_VMXE | X86_CR4_OSXMMEXCPT |
 			    X86_CR4_PGE | X86_CR4_OSFXSR;
 	if (boot_cpu_has(X86_FEATURE_PCID))
-		cr4 |= X86_CR4_PCID;
+		cr4 |= X86_CR4_PCIDE;
 	if (boot_cpu_has(X86_FEATURE_OSXSAVE))
 		cr4 |= X86_CR4_OSXSAVE;
 	if (boot_cpu_has(X86_FEATURE_FSGSBASE))

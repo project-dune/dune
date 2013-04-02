@@ -14,4 +14,12 @@
 #define VMX_EPT_EXTENT_INDIVIDUAL_BIT           (1ull << 24)
 #endif
 
+#ifndef X86_CR4_PCIDE
+#define X86_CR4_PCIDE		0x00020000 /* enable PCID support */
+#endif
+
+#ifndef SECONDARY_EXEC_ENABLE_INVPCID
+#define SECONDARY_EXEC_ENABLE_INVPCID	0x00001000
+#endif
+
 #endif /* __DUNE_COMPAT_H_ */
