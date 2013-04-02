@@ -4,15 +4,13 @@
  * Authors:
  *   Adam Belay <abelay@stanford.edu>
  *
- * Right now we support EPT by making a sort of 'shadow' copy of the Linux
- * process page table. In the future, a more invasive architecture port
- * to VMX x86 could provide better performance by eliminating the need for
- * two copies of each page table entry, relying instead on only the EPT
- * format.
+ * We support the EPT by making a sort of 'shadow' copy of the Linux
+ * process page table. Mappings are created lazily as they are needed.
+ * We keep the EPT synchronized with the process page table through
+ * mmu_notifier callbacks.
  * 
- * This code is only a prototype and could benefit from a more comprehensive
- * review in terms of performance and correctness. Also, the implications
- * of threaded processes haven't been fully considered.
+ * FIXME: Is it worth exploring the guest-PA layout further? For example,
+ * could we expose more address space when it's available on a given CPU?
  *
  * Some of the low-level EPT functions are based on KVM.
  * Original Authors:
@@ -278,6 +276,27 @@ static int ept_clear_epte(epte_t *epte)
 	return 1;
 }
 
+static int ept_clear_l1_epte(epte_t *epte)
+{
+	int i;
+	epte_t *pte = (epte_t *) epte_page_vaddr(*epte);
+
+	if (*epte == __EPTE_NONE)
+		return 0;
+
+	for (i = 0; i < PTRS_PER_PTE; i++) {
+		if (!epte_present(pte[i]))
+			continue;
+
+		free_ept_page(pte[i]);
+	}
+
+	free_page((uintptr_t) pte);
+	*epte = __EPTE_NONE;
+
+	return 1;
+}
+
 static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 			unsigned long gpa, unsigned long hva)
 {
@@ -301,8 +320,12 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 		return ret;
 	}
 
-	if (epte_present(*epte) && (epte_big(*epte) || !PageHuge(page)))
-		ept_clear_epte(epte);
+	if (epte_present(*epte)) {
+		if (!epte_big(*epte) && PageHuge(page))
+			ept_clear_l1_epte(epte);
+		else
+			ept_clear_epte(epte);
+	}
 
 	flags = __EPTE_READ | __EPTE_EXEC |
 		__EPTE_TYPE(EPTE_TYPE_WB) | __EPTE_IPAT;
@@ -317,9 +340,6 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 
 	if (PageHuge(page)) {
 		flags |= __EPTE_SZ;
-		if (epte_present(*epte) && !epte_big(*epte))
-			free_page(epte_page_vaddr(*epte));
-			/* FIXME: free L0 entries too */
 		*epte = epte_addr(page_to_phys(page) & ~((1 << 21) - 1)) |
 			flags;
 	} else
@@ -512,29 +532,11 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 
 	pr_debug("ept: change_pte addr %lx flags %lx\n", address, pte_flags(pte));
 
-#if 0
-	int ret;
-	unsigned long gpa = hva_to_gpa(vcpu, mm, (unsigned long) address);
-	int make_write = (pte_flags(pte) & _PAGE_RW) ? 1 : 0;
-
-
-	if (gpa == GPA_ADDR_INVAL) {
-		printk(KERN_ERR "ept: hva %lx is out of range\n", address);
-		return;
-	}
-
-	ret = ept_set_epte(vcpu, make_write, gpa, address);
-	if (!ret)
-		vmx_ept_sync_individual_addr(vcpu, (gpa_t) gpa);
-	else
-		printk(KERN_ERR "ept: ept_set_epte failed\n");
-#endif
-
 	/*
-	 * NOTE: Work around for recent linux kernels (seen on 3.7 at least).
-	 * They seem to hold a lock while calling this notifier, making it
-	 * impossible to call get_user_pages_fast(). As a result, we just
-	 * drop the page, and catch it later with a fault.
+	 * NOTE: Recent linux kernels (seen on 3.7 at least) hold a lock
+	 * while calling this notifier, making it impossible to call
+	 * get_user_pages_fast(). As a result, we just invalidate the
+	 * page so that the mapping can be recreated later during a fault.
 	 */
 	ept_invalidate_page(vcpu, mm, address);
 }
@@ -545,7 +547,7 @@ static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 {
 	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
 
-	printk(KERN_INFO "ept: clear_flush_young addr %lx\n", address);
+	pr_debug("ept: clear_flush_young addr %lx\n", address);
 
 	if (!vcpu->ept_ad_enabled)
 		return ept_invalidate_page(vcpu, mm, address);
@@ -559,7 +561,7 @@ static int ept_mmu_notifier_test_young(struct mmu_notifier *mn,
 {
 	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
 
-	printk(KERN_INFO "ept: test_young addr %lx\n", address);
+	pr_debug("ept: test_young addr %lx\n", address);
 
 	if (!vcpu->ept_ad_enabled)
 		return ept_check_page_mapped(vcpu, mm, address);
