@@ -7,6 +7,7 @@
 #include <sys/queue.h>
 #include "mmu.h"
 #include "elf.h"
+#include "fpu.h"
 
 typedef void (*sighandler_t)(int);
 
