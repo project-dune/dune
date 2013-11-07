@@ -182,7 +182,7 @@ ept_lookup_gpa(struct vmx_vcpu *vcpu, void *gpa, int level,
 		}
 
 		if (epte_big(dir[idx])) {
-			if (i != 1)
+			if (i != 1 || i != 2)
 				return -EINVAL;
 			level = i;
 			break;
@@ -234,8 +234,10 @@ static void vmx_free_ept(unsigned long ept_root)
 			epte_t *pmd = (epte_t *) epte_page_vaddr(pud[j]);
 			if (!epte_present(pud[j]))
 				continue;
-			if (epte_flags(pud[j]) & __EPTE_SZ)
+			if (epte_flags(pud[j]) & __EPTE_SZ) {
+				free_ept_page(pud[j]);
 				continue;
+			}
 
 			for (k = 0; k < PTRS_PER_PMD; k++) {
 				epte_t *pte = (epte_t *) epte_page_vaddr(pmd[k]);
@@ -297,12 +299,48 @@ static int ept_clear_l1_epte(epte_t *epte)
 	return 1;
 }
 
+static int ept_clear_l2_epte(epte_t *epte)
+{
+	int i, j;
+	epte_t *pmd = (epte_t *) epte_page_vaddr(*epte);
+
+	if (*epte == __EPTE_NONE)
+		return 0;
+
+	for (i = 0; i < PTRS_PER_PMD; i++) {
+		epte_t *pte = (epte_t *) epte_page_vaddr(pmd[i]);
+		if (!epte_present(pmd[i]))
+			continue;
+		if (epte_flags(pmd[i]) & __EPTE_SZ) {
+			free_ept_page(pmd[i]);
+			continue;
+		}
+
+		for (j = 0; j < PTRS_PER_PTE; j++) {
+			if (!epte_present(pte[j]))
+				continue;
+
+			free_ept_page(pte[j]);
+		}
+
+		free_page((uintptr_t) pte);
+	}
+
+	free_page((uintptr_t) pmd);
+
+	*epte = __EPTE_NONE;
+
+	return 1;
+}
+
 static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 			unsigned long gpa, unsigned long hva)
 {
 	int ret;
 	epte_t *epte, flags;
 	struct page *page;
+	unsigned huge_shift;
+	int level;
 
 	ret = get_user_pages_fast(hva, 1, make_write, &page);
 	if (ret != 1) {
@@ -312,8 +350,15 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 
 	spin_lock(&vcpu->ept_lock);
 
+	huge_shift = compound_order(compound_head(page)) + PAGE_SHIFT;
+	level = 0;
+	if (huge_shift == 30)
+		level = 2;
+	else if (huge_shift == 21)
+		level = 1;
+
 	ret = ept_lookup_gpa(vcpu, (void *) gpa,
-			     PageHuge(page) ? 1 : 0, 1, &epte);
+			     level, 1, &epte);
 	if (ret) {
 		spin_unlock(&vcpu->ept_lock);
 		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
@@ -321,7 +366,9 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 	}
 
 	if (epte_present(*epte)) {
-		if (!epte_big(*epte) && PageHuge(page))
+		if (!epte_big(*epte) && level == 2)
+			ept_clear_l2_epte(epte);
+		else if (!epte_big(*epte) && level == 1)
 			ept_clear_l1_epte(epte);
 		else
 			ept_clear_epte(epte);
@@ -338,9 +385,9 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 			flags |= __EPTE_D;
 	}
 
-	if (PageHuge(page)) {
+	if (level) {
 		flags |= __EPTE_SZ;
-		*epte = epte_addr(page_to_phys(page) & ~((1 << 21) - 1)) |
+		*epte = epte_addr(page_to_phys(page) & ~((1 << huge_shift) - 1)) |
 			flags;
 	} else
 		*epte = epte_addr(page_to_phys(page)) | flags;
