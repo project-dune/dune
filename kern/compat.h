@@ -22,4 +22,8 @@
 #define SECONDARY_EXEC_ENABLE_INVPCID	0x00001000
 #endif
 
+#ifndef X86_CR4_FSGSBASE
+#define X86_CR4_FSGSBASE	X86_CR4_RDWRGSFS
+#endif
+
 #endif /* __DUNE_COMPAT_H_ */

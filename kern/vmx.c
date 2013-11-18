@@ -790,7 +790,7 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 	if (boot_cpu_has(X86_FEATURE_OSXSAVE))
 		cr4 |= X86_CR4_OSXSAVE;
 	if (boot_cpu_has(X86_FEATURE_FSGSBASE))
-		cr4 |= X86_CR4_RDWRGSFS;
+		cr4 |= X86_CR4_FSGSBASE;
 
 	/* configure control and data registers */
 	vmcs_writel(GUEST_CR0, X86_CR0_PG | X86_CR0_PE | X86_CR0_WP |
