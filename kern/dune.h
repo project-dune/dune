@@ -33,7 +33,7 @@ struct dune_layout {
 
 #define GPA_SIZE ((unsigned long) 1 << 34)
 #define GPA_MASK (GPA_SIZE - 1)
-#define LG_ALIGN(addr)	((addr + (1 << 21) - 1) & ~((1 << 21) - 1))
+#define LG_ALIGN(addr)	((addr + (1 << 30) - 1) & ~((1 << 30) - 1))
 
 enum {
 	GPA_ADDR_PROC	= 0x000000000,
