@@ -202,6 +202,7 @@ static inline uintptr_t dune_va_to_pa(void *ptr)
 #define PERM_USR2	0x2000  /* User flag 2 */
 #define PERM_USR3	0x3000  /* User flag 3 */
 #define PERM_BIG	0x0100	/* Use large pages */
+#define PERM_BIG_1GB	0x0200	/* Use large pages (1GB) */
 
 // Helper Macros
 #define PERM_SCODE	(PERM_R | PERM_X)
@@ -246,6 +247,7 @@ enum {
 	CREATE_NONE = 0,
 	CREATE_NORMAL = 1,
 	CREATE_BIG = 2,
+	CREATE_BIG_1GB = 3,
 };
 
 extern int dune_vm_mprotect(ptent_t *root, void *va, size_t len, int perm);
