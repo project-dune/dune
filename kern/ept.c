@@ -73,6 +73,7 @@ typedef unsigned long epte_t;
 #define __EPTE_SZ	0x80
 #define __EPTE_A	0x100
 #define __EPTE_D	0x200
+#define __EPTE_PFNMAP	0x400 /* ignored by HW */
 #define __EPTE_TYPE(n)	(((n) & 0x7) << 3)
 
 enum {
@@ -215,6 +216,10 @@ static void free_ept_page(epte_t epte)
 {
 	struct page *page = pfn_to_page(epte_addr(epte) >> PAGE_SHIFT);
 
+	/* PFN mapppings are not backed by pages. */
+	if (epte & __EPTE_PFNMAP)
+		return;
+
 	if (epte & __EPTE_WRITE)
 		set_page_dirty_lock(page);
 	put_page(page);
@@ -333,6 +338,63 @@ static int ept_clear_l2_epte(epte_t *epte)
 	return 1;
 }
 
+static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
+				unsigned long gpa, unsigned long hva)
+{
+	struct vm_area_struct *vma;
+	struct mm_struct *mm = current->mm;
+	epte_t *epte, flags;
+	unsigned long pfn;
+	int ret;
+
+	down_read(&mm->mmap_sem);
+	vma = find_vma(mm, hva);
+	if (!vma) {
+		up_read(&mm->mmap_sem);
+		return -EFAULT;
+	}
+
+	if (!(vma->vm_flags & (VM_IO | VM_PFNMAP))) {
+		up_read(&mm->mmap_sem);
+		return -EFAULT;
+	}
+
+	ret = follow_pfn(vma, hva, &pfn);
+	if (ret) {
+		up_read(&mm->mmap_sem);
+		return ret;
+	}
+	up_read(&mm->mmap_sem);
+
+	/* NOTE: pfn's can not be huge pages, which is quite a relief here */
+	spin_lock(&vcpu->ept_lock);
+	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 1, &epte);
+	if (ret) {
+		spin_unlock(&vcpu->ept_lock);
+		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
+		return ret;
+	}
+
+	flags = __EPTE_READ | __EPTE_TYPE(EPTE_TYPE_UC) |
+		__EPTE_IPAT | __EPTE_PFNMAP;
+	if (make_write)
+		flags |= __EPTE_WRITE;
+	if (vcpu->ept_ad_enabled) {
+		/* premark A/D to avoid extra memory references */
+		flags |= __EPTE_A;
+		if (make_write)
+			flags |= __EPTE_D;
+	}
+
+	if (epte_present(*epte))
+		ept_clear_epte(epte);
+
+	*epte = epte_addr(pfn << PAGE_SHIFT) | flags;
+	spin_unlock(&vcpu->ept_lock);
+
+	return 0;
+}
+
 static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 			unsigned long gpa, unsigned long hva)
 {
@@ -344,7 +406,9 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 
 	ret = get_user_pages_fast(hva, 1, make_write, &page);
 	if (ret != 1) {
-		printk(KERN_ERR "ept: failed to get user page %lx\n", hva);
+		ret = ept_set_pfnmap_epte(vcpu, make_write, gpa, hva);
+		if (ret)
+			printk(KERN_ERR "ept: failed to get user page %lx\n", hva);
 		return ret;
 	}
 
