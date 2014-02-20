@@ -180,6 +180,8 @@ static inline ptent_t get_pte_perm(int perm)
 		pte_perm |= PTE_NX;
 	if (perm & PERM_U)
 		pte_perm |= PTE_U;
+	if (perm & PERM_UC)
+		pte_perm |= PTE_PCD;
 	if (perm & PERM_COW)
 		pte_perm |= PTE_COW;
 	if (perm & PERM_USR1)

@@ -197,7 +197,8 @@ static inline uintptr_t dune_va_to_pa(void *ptr)
 #define PERM_W		0x0002	/* write permission */
 #define PERM_X		0x0004	/* execute permission */
 #define PERM_U		0x0008	/* user-level permission */
-#define PERM_COW	0x0010	/* COW flag */
+#define PERM_UC		0x0010  /* make uncachable */
+#define PERM_COW	0x0020	/* COW flag */
 #define PERM_USR1	0x1000  /* User flag 1 */
 #define PERM_USR2	0x2000  /* User flag 2 */
 #define PERM_USR3	0x3000  /* User flag 3 */
