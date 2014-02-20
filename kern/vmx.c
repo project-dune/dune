@@ -1628,7 +1628,7 @@ static __init void vmx_enable(void *unused)
 		goto failed;
 
 	__get_cpu_var(vmx_enabled) = 1;
-	store_gdt(&__get_cpu_var(host_gdt));
+	native_store_gdt(&__get_cpu_var(host_gdt));
 
 	printk(KERN_INFO "vmx: VMX enabled on CPU %d\n",
 	       raw_smp_processor_id());
