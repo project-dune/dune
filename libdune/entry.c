@@ -672,6 +672,7 @@ int dune_init(bool map_full)
 		case SIGSTOP:
 		case SIGKILL:
 		case SIGCHLD:
+		case SIGINT:
 			continue;
 		}
 
