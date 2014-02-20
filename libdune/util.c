@@ -8,7 +8,7 @@
 #include <signal.h>
 
 #include "dune.h"
-#include "../kern/dune.h"
+#include "../../dune/dune.h"
 
 static int dune_puts(const char *buf)
 {

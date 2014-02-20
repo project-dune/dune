@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 
-#include "../kern/dune.h"
+#include "../../dune/dune.h"
 #include "dune.h"
 #include "mmu.h"
 #include "cpu-x86.h"
