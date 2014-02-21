@@ -5,6 +5,8 @@
 #include <malloc.h>
 #include <errno.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include "dune.h"
 
@@ -147,6 +149,9 @@ int dune_vm_page_walk(ptent_t *root, void *start_va, void *end_va,
 		memset(pde, 0, PGSIZE);
 
 		pdpte[j] = PTE_ADDR(pde) | PTE_DEF_FLAGS;
+	} else if (pte_big(pdpte[j])) {
+		*pte_out = &pdpte[j];
+		return 0;
 	} else
 		pde = (ptent_t*) PTE_ADDR(pdpte[j]);
 

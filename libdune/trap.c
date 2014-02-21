@@ -3,6 +3,8 @@
  */
 
 #include <errno.h>
+#include <stdbool.h>
+#include <sys/types.h>
 
 #include "dune.h"
 #include "cpu-x86.h"

@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <sys/mman.h>
 #include <errno.h>
 #include <malloc.h>

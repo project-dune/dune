@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #include "dune.h"
 #include "../../dune/dune.h"

@@ -2,9 +2,10 @@
  * dune.h - the libdune API
  */
 
-#include <stdbool.h>
-#include <sys/types.h>
+#pragma once
+
 #include <sys/queue.h>
+
 #include "mmu.h"
 #include "elf.h"
 #include "fpu.h"
