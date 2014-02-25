@@ -170,17 +170,20 @@ static inline void dune_page_put(struct page *pg)
 // virtual memory
 
 extern ptent_t *pgroot;
+extern uintptr_t phys_limit;
 extern uintptr_t mmap_base;
 extern uintptr_t stack_base;
 
 static inline uintptr_t dune_mmap_addr_to_pa(void *ptr)
 {
-	return ((uintptr_t) ptr) - mmap_base + 0x400000000;
+	return ((uintptr_t) ptr) - mmap_base +
+		phys_limit - GPA_STACK_SIZE - GPA_MAP_SIZE;
 }
 
 static inline uintptr_t dune_stack_addr_to_pa(void *ptr)
 {
-	return ((uintptr_t) ptr) - stack_base + 0x800000000;
+	return ((uintptr_t) ptr) - stack_base +
+		phys_limit - GPA_STACK_SIZE;
 }
 
 static inline uintptr_t dune_va_to_pa(void *ptr)
@@ -288,7 +291,7 @@ struct dune_procmap_entry {
 	bool		x; // Executable
 	bool		p; // Private (or shared)
 	char		*path;
-	int			type;
+	int		type;
 };
 
 typedef void (*dune_procmap_cb)(const struct dune_procmap_entry *);

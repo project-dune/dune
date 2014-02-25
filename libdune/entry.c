@@ -21,13 +21,13 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 
-#include "../../dune/dune.h"
 #include "dune.h"
 #include "mmu.h"
 #include "cpu-x86.h"
 #include "local.h"
 
 ptent_t *pgroot;
+uintptr_t phys_limit;
 uintptr_t mmap_base;
 uintptr_t stack_base;
 
@@ -464,20 +464,20 @@ static int __setup_mappings_full(struct dune_layout *layout)
 {
 	int ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_proc, GPA_SIZE,
-			      (void *) GPA_ADDR_PROC,
+	ret = dune_vm_map_phys(pgroot, (void *) 0, 1UL << 32,
+			      (void *) 0,
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_map, GPA_SIZE,
-			      (void *) GPA_ADDR_MAP,
+	ret = dune_vm_map_phys(pgroot, (void *) layout->base_map, GPA_MAP_SIZE,
+			      (void *) dune_mmap_addr_to_pa((void *) layout->base_map),
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_stack, GPA_SIZE,
-			      (void *) GPA_ADDR_STACK,
+	ret = dune_vm_map_phys(pgroot, (void *) layout->base_stack, GPA_STACK_SIZE,
+			      (void *) dune_stack_addr_to_pa((void *) layout->base_stack),
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
@@ -495,6 +495,7 @@ static int setup_mappings(bool full)
 	if (ret)
 		return ret;
 
+	phys_limit = layout.phys_limit;
 	mmap_base = layout.base_map;
 	stack_base = layout.base_stack;
 

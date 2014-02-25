@@ -68,9 +68,9 @@ static long dune_dev_ioctl(struct file *filp,
 		break;
 
 	case DUNE_GET_LAYOUT:
-		layout.base_proc = 0;
-		layout.base_map = LG_ALIGN(current->mm->mmap_base) - GPA_SIZE;
-		layout.base_stack = ((unsigned long) current->mm->context.vdso & ~GPA_MASK);
+		layout.phys_limit = (1UL << boot_cpu_data.x86_phys_bits);
+		layout.base_map = LG_ALIGN(current->mm->mmap_base) - GPA_MAP_SIZE;
+		layout.base_stack = LG_ALIGN(current->mm->start_stack) - GPA_STACK_SIZE;
 		r = copy_to_user((void __user *)arg, &layout,
 				 sizeof(struct dune_layout));
 		if (r) {

@@ -12,7 +12,7 @@
 #define DUNE_MINOR       233
 
 #define DUNE_ENTER	_IOR(DUNE_MINOR, 0x01, struct dune_config)
-#define DUNE_GET_SYSCALL	 _IO(DUNE_MINOR, 0x02)
+#define DUNE_GET_SYSCALL _IO(DUNE_MINOR, 0x02)
 #define DUNE_GET_LAYOUT	_IOW(DUNE_MINOR, 0x03, struct dune_layout)
 
 // XXX: Must match libdune/dune.h
@@ -26,18 +26,12 @@ struct dune_config {
 } __attribute__((packed));
 
 struct dune_layout {
-	__u64 base_proc;
+	__u64 phys_limit;
 	__u64 base_map;
 	__u64 base_stack;
 } __attribute__((packed));
 
-#define GPA_SIZE ((unsigned long) 1 << 34)
-#define GPA_MASK (GPA_SIZE - 1)
-#define LG_ALIGN(addr)	((addr + (1 << 30) - 1) & ~((1 << 30) - 1))
+#define GPA_STACK_SIZE	((unsigned long) 1 << 28) /* 256 megabytes */
+#define GPA_MAP_SIZE	(((unsigned long) 1 << 31) - GPA_STACK_SIZE) /* 1.75 gigabytes */
+#define LG_ALIGN(addr)	((addr + (1 << 21) - 1) & ~((1 << 21) - 1))
 
-enum {
-	GPA_ADDR_PROC	= 0x000000000,
-	GPA_ADDR_MAP 	= 0x400000000,
-	GPA_ADDR_STACK	= 0x800000000,
-	GPA_ADDR_INVAL	= 0xC00000000,
-};

@@ -9,7 +9,6 @@
 #include <stdbool.h>
 
 #include "dune.h"
-#include "../../dune/dune.h"
 
 static int dune_puts(const char *buf)
 {
