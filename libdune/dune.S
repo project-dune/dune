@@ -63,11 +63,11 @@
  * Supervisor Private Area Format
  */
 
-#define TMP		(0)
-#define KFS_BASE	(8)
-#define UFS_BASE	(16)
-#define IN_USERMODE	(24)
-#define TRAP_STACK	(36)
+#define TMP		(8)
+#define KFS_BASE	(16)
+#define UFS_BASE	(24)
+#define IN_USERMODE	(32)
+#define TRAP_STACK	(44)
 
 .text
 
