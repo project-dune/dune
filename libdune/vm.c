@@ -41,9 +41,9 @@ static inline void put_page(void * page)
 	dune_page_put(pg);
 }
 
-static int __dune_vm_page_walk(ptent_t *dir, void *start_va, void *end_va,
-			      page_walk_cb cb, const void *arg, int level,
-			      int create)
+int __dune_vm_page_walk(ptent_t *dir, void *start_va, void *end_va,
+			page_walk_cb cb, const void *arg, int level,
+			int create)
 {
 	// XXX: Using PA == VA
 	int i, ret;
