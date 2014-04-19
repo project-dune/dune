@@ -77,7 +77,7 @@ struct vmx_vcpu {
 };
 
 extern __init int vmx_init(void);
-extern __exit void vmx_exit(void);
+extern void vmx_exit(void);
 
 extern int vmx_launch(struct dune_config *conf, int64_t *ret_code);
 
