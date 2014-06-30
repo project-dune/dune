@@ -374,15 +374,7 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 	      CPU_BASED_CR3_STORE_EXITING |
 	      CPU_BASED_MOV_DR_EXITING |
 	      CPU_BASED_USE_TSC_OFFSETING |
-	      CPU_BASED_MWAIT_EXITING |
-	      CPU_BASED_MONITOR_EXITING |
 	      CPU_BASED_INVLPG_EXITING;
-
-#if 0 /* FIXME: Do we need this? */
-	if (yield_on_hlt)
-		min |= CPU_BASED_HLT_EXITING;
-#endif
-	min |= CPU_BASED_HLT_EXITING;
 
 	opt = CPU_BASED_TPR_SHADOW |
 	      CPU_BASED_USE_MSR_BITMAPS |
@@ -1167,11 +1159,6 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	regs->cs = __USER_CS;
 	regs->ss = __USER_DS;
 }
-
-typedef long (*do_fork_hack) (unsigned long, unsigned long,
-			      struct pt_regs *, unsigned long,
-			      int __user *, int __user *);
-static do_fork_hack dune_do_fork = (do_fork_hack) DO_FORK;
 
 static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
 		void __user *parent_tid, void __user *child_tid)
