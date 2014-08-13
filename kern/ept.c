@@ -127,11 +127,11 @@ static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu,
 	mmap_start = LG_ALIGN(mm->mmap_base) - GPA_MAP_SIZE;
 	stack_start = LG_ALIGN(mm->start_stack) - GPA_STACK_SIZE;
 
-	if (hva > stack_start) {
+	if (hva >= stack_start) {
 		if (hva - stack_start >= GPA_STACK_SIZE)
 			return ADDR_INVAL;
 		gpa = hva - stack_start + phys_end - GPA_STACK_SIZE;
-	} else if (hva > mmap_start) {
+	} else if (hva >= mmap_start) {
 		if (hva - mmap_start >= GPA_MAP_SIZE)
 			return ADDR_INVAL;
 		gpa = hva - mmap_start + phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE;
@@ -433,6 +433,7 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 			     level, 1, &epte);
 	if (ret) {
 		spin_unlock(&vcpu->ept_lock);
+		put_page(page);
 		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
 		return ret;
 	}
@@ -458,11 +459,15 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 	}
 
 	if (level) {
+		struct page *tmp = page;
+		page = compound_head(page);
+		get_page(page);
+		put_page(tmp);
+
 		flags |= __EPTE_SZ;
-		*epte = epte_addr(page_to_phys(page) & ~((1 << huge_shift) - 1)) |
-			flags;
-	} else
-		*epte = epte_addr(page_to_phys(page)) | flags;
+	}
+
+	*epte = epte_addr(page_to_phys(page)) | flags;
 
 	spin_unlock(&vcpu->ept_lock);
 
