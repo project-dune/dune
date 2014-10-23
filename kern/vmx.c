@@ -718,6 +718,8 @@ void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
 		__vmx_sync_individual_addr_helper, (void *) &args, 1);
 }
 
+#define STACK_DEPTH 12
+
 /**
  * vmx_dump_cpu - prints the CPU state
  * @vcpu: VCPU to print
@@ -725,6 +727,8 @@ void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
 static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 {
 	unsigned long flags;
+	int i;
+	unsigned long *sp, val;
 
 	vmx_get_cpu(vcpu);
 	vcpu->regs[VCPU_REGS_RIP] = vmcs_readl(GUEST_RIP);
@@ -752,6 +756,17 @@ static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 			vcpu->regs[VCPU_REGS_R12], vcpu->regs[VCPU_REGS_R13]);
 	printk(KERN_INFO "vmx: R14 0x%016llx R15 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_R14], vcpu->regs[VCPU_REGS_R15]);
+
+	printk(KERN_INFO "vmx: Dumping Stack Contents...\n");
+	sp = (unsigned long *) vcpu->regs[VCPU_REGS_RSP];
+	for (i = 0; i < STACK_DEPTH; i++)
+		if (get_user(val, &sp[i]))
+			printk(KERN_INFO "vmx: RSP%+-3ld ?\n",
+				i * sizeof(long));
+		else
+			printk(KERN_INFO "vmx: RSP%+-3ld 0x%016lx\n",
+				i * sizeof(long), val);
+
 	printk(KERN_INFO "vmx: --- End VCPU Dump ---\n");
 }
 
