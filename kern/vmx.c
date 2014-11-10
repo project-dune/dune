@@ -257,16 +257,6 @@ static void vmcs_load(struct vmcs *vmcs)
 		       vmcs, phys_addr);
 }
 
-
-static __always_inline unsigned long vmcs_readl(unsigned long field)
-{
-	unsigned long value;
-
-	asm volatile (ASM_VMX_VMREAD_RDX_RAX
-		      : "=a"(value) : "d"(field) : "cc");
-	return value;
-}
-
 static __always_inline u16 vmcs_read16(unsigned long field)
 {
 	return vmcs_readl(field);
