@@ -78,7 +78,7 @@ static sys_call_ptr_t dune_syscall_tbl[NUM_SYSCALLS] __cacheline_aligned;
 static DEFINE_PER_CPU(struct vmcs *, vmxarea);
 static DEFINE_PER_CPU(struct desc_ptr, host_gdt);
 static DEFINE_PER_CPU(int, vmx_enabled);
-static DEFINE_PER_CPU(struct vmx_vcpu *, local_vcpu);
+DEFINE_PER_CPU(struct vmx_vcpu *, local_vcpu);
 
 static struct vmcs_config {
 	int size;

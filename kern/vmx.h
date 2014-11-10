@@ -7,6 +7,8 @@
 #include <asm/vmx.h>
 #include <linux/kvm_types.h>
 
+DECLARE_PER_CPU(struct vmx_vcpu *, local_vcpu);
+
 struct vmcs {
 	u32 revision_id;
 	u32 abort;

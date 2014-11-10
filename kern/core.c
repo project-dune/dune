@@ -21,6 +21,7 @@
 #include <linux/miscdevice.h>
 #include <linux/compat.h>
 #include <linux/fs.h>
+#include <linux/perf_event.h>
 #include <asm/uaccess.h>
 
 #include "dune.h"
@@ -28,6 +29,35 @@
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("A driver for Dune");
+
+/* Callbacks for perf tool.  We intentionally make a wrong assumption that we
+ * are always in the kernel mode because perf cannot profile user applications
+ * on guest.
+ * Callbacks are registered and unregistered along with Dune module.
+ */
+static int dune_is_in_guest(void)
+{
+	return __get_cpu_var(local_vcpu) != NULL;
+}
+
+static int dune_is_user_mode(void)
+{
+        return 0;
+}
+
+static unsigned long dune_get_guest_ip(void)
+{
+	unsigned long long ip = 0;
+	if (__get_cpu_var(local_vcpu))
+		ip = vmcs_readl(GUEST_RIP);
+	return ip;
+}
+
+static struct perf_guest_info_callbacks dune_guest_cbs = {
+        .is_in_guest            = dune_is_in_guest,
+        .is_user_mode           = dune_is_user_mode,
+        .get_guest_ip           = dune_get_guest_ip,
+};
 
 static int dune_enter(struct dune_config *conf, int64_t *ret)
 {
@@ -105,6 +135,7 @@ static struct miscdevice dune_dev = {
 static int __init dune_init(void)
 {
 	int r;
+	perf_register_guest_info_callbacks(&dune_guest_cbs);
 
 	printk(KERN_ERR "Dune module loaded\n");
 
@@ -124,6 +155,7 @@ static int __init dune_init(void)
 
 static void __exit dune_exit(void)
 {
+	perf_unregister_guest_info_callbacks(&dune_guest_cbs);
 	misc_deregister(&dune_dev);
 	vmx_exit();
 }
