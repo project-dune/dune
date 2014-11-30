@@ -866,6 +866,29 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);  /* 22.2.1 */
 }
 
+static void setup_perf_msrs(struct vmx_vcpu *vcpu)
+{
+	int nr_msrs, i;
+	struct perf_guest_switch_msr *msrs;
+	struct vmx_msr_entry *e;
+
+	msrs = perf_guest_get_msrs(&nr_msrs);
+
+	vcpu->msr_autoload.nr = nr_msrs;
+
+	vmcs_write32(VM_EXIT_MSR_LOAD_COUNT, vcpu->msr_autoload.nr);
+	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, vcpu->msr_autoload.nr);
+
+	for (i = 0; i < nr_msrs; i++) {
+		e = &vcpu->msr_autoload.host[i];
+		e->index = msrs[i].msr;
+		e->value = msrs[i].host;
+		e = &vcpu->msr_autoload.guest[i];
+		e->index = msrs[i].msr;
+		e->value = msrs[i].guest;
+	}
+}
+
 static void __vmx_disable_intercept_for_msr(unsigned long *msr_bitmap, u32 msr)
 {
 	int f = sizeof(unsigned long);
@@ -1507,6 +1530,8 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, x);
 			continue;
 		}
+
+		setup_perf_msrs(vcpu);
 
 		ret = vmx_run_vcpu(vcpu);
 
