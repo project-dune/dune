@@ -886,39 +886,14 @@ static void __vmx_disable_intercept_for_msr(unsigned long *msr_bitmap, u32 msr)
 
 static void setup_msr(struct vmx_vcpu *vcpu)
 {
-	int set[] = { MSR_LSTAR };
-	struct vmx_msr_entry *e;
-	int sz = sizeof(set) / sizeof(*set);
-	int i;
-
-	sz = 0;
-
-	BUILD_BUG_ON(sz > NR_AUTOLOAD_MSRS);
-
-	vcpu->msr_autoload.nr = sz;
-
 	/* XXX enable only MSRs in set */
 	vmcs_write64(MSR_BITMAP, __pa(msr_bitmap));
 
-	vmcs_write32(VM_EXIT_MSR_STORE_COUNT, vcpu->msr_autoload.nr);
-	vmcs_write32(VM_EXIT_MSR_LOAD_COUNT, vcpu->msr_autoload.nr);
-	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, vcpu->msr_autoload.nr);
+	vmcs_write32(VM_EXIT_MSR_LOAD_COUNT, 0);
+	vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, 0);
 
 	vmcs_write64(VM_EXIT_MSR_LOAD_ADDR, __pa(vcpu->msr_autoload.host));
-	vmcs_write64(VM_EXIT_MSR_STORE_ADDR, __pa(vcpu->msr_autoload.guest));
 	vmcs_write64(VM_ENTRY_MSR_LOAD_ADDR, __pa(vcpu->msr_autoload.guest));
-
-	for (i = 0; i < sz; i++) {
-		uint64_t val;
-
-		e = &vcpu->msr_autoload.host[i];
-		e->index = set[i];
-		rdmsrl(e->index, val);
-		e->value = val;
-
-		e = &vcpu->msr_autoload.guest[i];
-		e->index = set[i];
-	}
 }
 
 /**
