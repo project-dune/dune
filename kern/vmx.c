@@ -1458,7 +1458,6 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 	intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
 	vmx_put_cpu(vcpu);
 
-	printk(KERN_INFO "vmx: got an exception\n");
 	if ((intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR)
 		return 0;
 
@@ -1474,6 +1473,7 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 {
 	int ret, done = 0;
+	u32 exit_intr_info;
 	struct vmx_vcpu *vcpu = vmx_create_vcpu(conf);
 	if (!vcpu)
 		return -ENOMEM;
@@ -1534,6 +1534,13 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		setup_perf_msrs(vcpu);
 
 		ret = vmx_run_vcpu(vcpu);
+
+		/* We need to handle NMIs before interrupts are enabled */
+		exit_intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
+		if ((exit_intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR &&
+		    (exit_intr_info & INTR_INFO_VALID_MASK)) {
+			asm("int $2");
+		}
 
 		local_irq_enable();
 
