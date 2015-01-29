@@ -1706,6 +1706,7 @@ __init int vmx_init(void)
 	memset(msr_bitmap, 0xff, PAGE_SIZE);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_FS_BASE);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_GS_BASE);
+	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_PKG_ENERGY_STATUS);
 
 	set_bit(0, vmx_vpid_bitmap); /* 0 is reserved for host */
 
