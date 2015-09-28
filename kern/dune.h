@@ -32,6 +32,6 @@ struct dune_layout {
 } __attribute__((packed));
 
 #define GPA_STACK_SIZE	((unsigned long) 1 << 28) /* 256 megabytes */
-#define GPA_MAP_SIZE	(((unsigned long) 1 << 31) - GPA_STACK_SIZE) /* 1.75 gigabytes */
+#define GPA_MAP_SIZE   (((unsigned long) 1 << 36) - GPA_STACK_SIZE) /* 63.75 gigabytes */
 #define LG_ALIGN(addr)	((addr + (1 << 21) - 1) & ~((1 << 21) - 1))
 
