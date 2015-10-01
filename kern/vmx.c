@@ -636,6 +636,8 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 {
 	int cur_cpu = get_cpu();
 
+	wrmsrl(MSR_KERNEL_GS_BASE, vcpu->guest_kernel_gs_base);
+
 	if (__this_cpu_read(local_vcpu) != vcpu) {
 		this_cpu_write(local_vcpu, vcpu);
 
@@ -665,6 +667,7 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
  */
 static void vmx_put_cpu(struct vmx_vcpu *vcpu)
 {
+	rdmsrl(MSR_KERNEL_GS_BASE, vcpu->guest_kernel_gs_base);
 	put_cpu();
 }
 
@@ -751,6 +754,8 @@ static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 			vcpu->regs[VCPU_REGS_R12], vcpu->regs[VCPU_REGS_R13]);
 	printk(KERN_INFO "vmx: R14 0x%016llx R15 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_R14], vcpu->regs[VCPU_REGS_R15]);
+	printk(KERN_INFO "vmx: FS.base 0x%016lx GS.base 0x%016lx\n",
+			vmcs_readl(GUEST_FS_BASE), vmcs_readl(GUEST_GS_BASE));
 
 	printk(KERN_INFO "vmx: Dumping Stack Contents...\n");
 	sp = (unsigned long *) vcpu->regs[VCPU_REGS_RSP];
