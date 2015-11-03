@@ -38,3 +38,10 @@ struct dune_layout {
 #define LG_ALIGN(addr)	((addr + (1 << 30) - 1) & ~((1 << 30) - 1))
 
 #endif /* __ASSEMBLY__ */
+
+#define IOCTL_DUNE_ENTER 0x8020e901
+
+#define DUNE_CFG_RIP 0x00
+#define DUNE_CFG_RSP 0x08
+#define DUNE_CFG_CR3 0x10
+#define DUNE_CFG_RET 0x18

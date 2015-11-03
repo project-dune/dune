@@ -2,6 +2,9 @@
  * dune.S - assembly helper routines (e.g. system calls, interrupts, traps)
  */
 
+#define __ASSEMBLY__
+#include "../kern/dune.h"
+
 #define USE_RDWRGSFS 0
 
 #define MSR_FS_BASE	0xc0000100
@@ -49,15 +52,6 @@
 #define EF_START (128)
 #define TF_END	(168)
 #define TF_ALIGN (176)
-
-/*
- * Dune Config Format
- * NOTE: this reflects the layout of struct dune_config
- */
-#define DUNE_CFG_RIP	(0)
-#define DUNE_CFG_RSP	(8)
-#define DUNE_CFG_CR3	(16)
-#define DUNE_CFG_RET	(24)
 
 /*
  * Supervisor Private Area Format
@@ -195,7 +189,7 @@ __dune_enter:
 	SAVE_REST
 	movq	%rsp, DUNE_CFG_RSP(%rsi)
 	movq	%rsi, %rdx
-	movq	$0x8020e901, %rsi /* XXX DUNE_ENTER */
+	movq	$IOCTL_DUNE_ENTER, %rsi
 	movq	$16, %rax /* __NR_ioctl */
 	syscall
 
