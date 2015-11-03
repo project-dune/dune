@@ -21,10 +21,26 @@
 #define DUNE_SIGNAL_INTR_BASE 200
 
 struct dune_config {
-	__u64 rip;
-	__u64 rsp;
-	__u64 cr3;
 	__s64 ret;
+	__u64 rax;
+	__u64 rbx;
+	__u64 rcx;
+	__u64 rdx;
+	__u64 rsi;
+	__u64 rdi;
+	__u64 rsp;
+	__u64 rbp;
+	__u64 r8;
+	__u64 r9;
+	__u64 r10;
+	__u64 r11;
+	__u64 r12;
+	__u64 r13;
+	__u64 r14;
+	__u64 r15;
+	__u64 rip;
+	__u64 rflags;
+	__u64 cr3;
 } __attribute__((packed));
 
 struct dune_layout {
@@ -39,9 +55,25 @@ struct dune_layout {
 
 #endif /* __ASSEMBLY__ */
 
-#define IOCTL_DUNE_ENTER 0x8020e901
+#define IOCTL_DUNE_ENTER 0x80a0e901
 
-#define DUNE_CFG_RIP 0x00
-#define DUNE_CFG_RSP 0x08
-#define DUNE_CFG_CR3 0x10
-#define DUNE_CFG_RET 0x18
+#define DUNE_CFG_RET 0x00
+#define DUNE_CFG_RAX 0x08
+#define DUNE_CFG_RBX 0x10
+#define DUNE_CFG_RCX 0x18
+#define DUNE_CFG_RDX 0x20
+#define DUNE_CFG_RSI 0x28
+#define DUNE_CFG_RDI 0x30
+#define DUNE_CFG_RSP 0x38
+#define DUNE_CFG_RBP 0x40
+#define DUNE_CFG_R8 0x48
+#define DUNE_CFG_R9 0x50
+#define DUNE_CFG_R10 0x58
+#define DUNE_CFG_R11 0x60
+#define DUNE_CFG_R12 0x68
+#define DUNE_CFG_R13 0x70
+#define DUNE_CFG_R14 0x78
+#define DUNE_CFG_R15 0x80
+#define DUNE_CFG_RIP 0x88
+#define DUNE_CFG_RFLAGS 0x90
+#define DUNE_CFG_CR3 0x98

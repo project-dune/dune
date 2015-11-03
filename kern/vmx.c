@@ -803,9 +803,6 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 	vmcs_writel(GUEST_GDTR_LIMIT, 0);
 	vmcs_writel(GUEST_IDTR_BASE, 0);
 	vmcs_writel(GUEST_IDTR_LIMIT, 0);
-	vmcs_writel(GUEST_RIP, conf->rip);
-	vmcs_writel(GUEST_RSP, conf->rsp);
-	vmcs_writel(GUEST_RFLAGS, conf->rflags);
 	vmcs_writel(GUEST_DR7, 0);
 
 	/* guest segment bases */
@@ -1022,6 +1019,32 @@ static void vmx_free_vpid(struct vmx_vcpu *vmx)
 }
 
 /**
+ * vmx_setup_registers - setup general purpose registers
+ */
+static void vmx_setup_registers(struct vmx_vcpu *vcpu, struct dune_config *conf)
+{
+	vcpu->regs[VCPU_REGS_RAX] = conf->rax;
+	vcpu->regs[VCPU_REGS_RBX] = conf->rbx;
+	vcpu->regs[VCPU_REGS_RCX] = conf->rcx;
+	vcpu->regs[VCPU_REGS_RDX] = conf->rdx;
+	vcpu->regs[VCPU_REGS_RSI] = conf->rsi;
+	vcpu->regs[VCPU_REGS_RDI] = conf->rdi;
+	vcpu->regs[VCPU_REGS_RBP] = conf->rbp;
+	vcpu->regs[VCPU_REGS_R8]  = conf->r8;
+	vcpu->regs[VCPU_REGS_R9]  = conf->r9;
+	vcpu->regs[VCPU_REGS_R10] = conf->r10;
+	vcpu->regs[VCPU_REGS_R11] = conf->r11;
+	vcpu->regs[VCPU_REGS_R12] = conf->r12;
+	vcpu->regs[VCPU_REGS_R13] = conf->r13;
+	vcpu->regs[VCPU_REGS_R14] = conf->r14;
+	vcpu->regs[VCPU_REGS_R15] = conf->r15;
+
+	vmcs_writel(GUEST_RIP, conf->rip);
+	vmcs_writel(GUEST_RSP, conf->rsp);
+	vmcs_writel(GUEST_RFLAGS, conf->rflags);
+}
+
+/**
  * vmx_create_vcpu - allocates and initializes a new virtual cpu
  *
  * Returns: A new VCPU structure
@@ -1052,6 +1075,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vmx_get_cpu(vcpu);
 	vmx_setup_vmcs(vcpu);
 	vmx_setup_initial_guest_state(conf);
+	vmx_setup_registers(vcpu, conf);
 	vmx_put_cpu(vcpu);
 
 	if (cpu_has_vmx_ept_ad_bits()) {
