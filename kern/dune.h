@@ -2,6 +2,8 @@
  * dune.h - public header for Dune support
  */
 
+#ifndef __ASSEMBLY__
+
 #include <linux/types.h>
 
 /*
@@ -35,3 +37,4 @@ struct dune_layout {
 #define GPA_MAP_SIZE   (((unsigned long) 1 << 36) - GPA_STACK_SIZE) /* 63 gigabytes */
 #define LG_ALIGN(addr)	((addr + (1 << 30) - 1) & ~((1 << 30) - 1))
 
+#endif /* __ASSEMBLY__ */
