@@ -194,13 +194,17 @@ __dune_enter:
 	syscall
 
 	cmpq	$0, %rax
-	jnz __dune_ret
+	jnz __dune_ret_fail
 	movq	DUNE_CFG_RET(%rdx), %rdi
 	movq	$60, %rax /* __NR_exit */
 	syscall
 
+/* __dune_ret is the location of the first instruction executed in Dune mode */
 .globl	__dune_ret
 __dune_ret:
+	xorq %rax, %rax /* return 0 from __dune_enter */
+
+__dune_ret_fail:
 	RESTORE_REST
 	RESTORE_REGS 1, 0
 	addq	$REG_END, %rsp
