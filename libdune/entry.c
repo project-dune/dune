@@ -26,6 +26,8 @@
 #include "cpu-x86.h"
 #include "local.h"
 
+#define BUILD_ASSERT(cond) do { (void) sizeof(char [1 - 2*!(cond)]); } while(0)
+
 ptent_t *pgroot;
 uintptr_t phys_limit;
 uintptr_t mmap_base;
@@ -659,6 +661,12 @@ int dune_enter_ex(void *percpu)
 int dune_init(bool map_full)
 {
 	int ret, i;
+
+	BUILD_ASSERT(IOCTL_DUNE_ENTER == DUNE_ENTER);
+	BUILD_ASSERT(DUNE_CFG_RIP == offsetof(struct dune_config, rip));
+	BUILD_ASSERT(DUNE_CFG_RSP == offsetof(struct dune_config, rsp));
+	BUILD_ASSERT(DUNE_CFG_CR3 == offsetof(struct dune_config, cr3));
+	BUILD_ASSERT(DUNE_CFG_RET == offsetof(struct dune_config, ret));
 
 	dune_fd = open("/dev/dune", O_RDWR);
 	if (dune_fd <= 0) {
