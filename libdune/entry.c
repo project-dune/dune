@@ -571,6 +571,7 @@ static int do_dune_enter(struct dune_percpu *percpu)
 	conf.rip = (__u64) &__dune_ret;
 	conf.rsp = 0;
 	conf.cr3 = (physaddr_t) pgroot;
+	conf.rflags = 0x2;
 
 	ret = __dune_enter(dune_fd, &conf);
 	if (ret) {

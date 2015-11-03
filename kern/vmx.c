@@ -805,7 +805,7 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 	vmcs_writel(GUEST_IDTR_LIMIT, 0);
 	vmcs_writel(GUEST_RIP, conf->rip);
 	vmcs_writel(GUEST_RSP, conf->rsp);
-	vmcs_writel(GUEST_RFLAGS, 0x02);
+	vmcs_writel(GUEST_RFLAGS, conf->rflags);
 	vmcs_writel(GUEST_DR7, 0);
 
 	/* guest segment bases */
