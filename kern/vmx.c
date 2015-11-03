@@ -1057,6 +1057,8 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 
 	memset(vcpu, 0, sizeof(*vcpu));
 
+	vcpu->conf = conf;
+
 	vcpu->vmcs = vmx_alloc_vmcs();
 	if (!vcpu->vmcs)
 		goto fail_vmcs;
@@ -1121,7 +1123,8 @@ static int dune_exit(int error_code)
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
 	vcpu->shutdown = 1;
-	vcpu->ret_code = error_code;
+	vcpu->ret_code = DUNE_RET_EXIT;
+	vcpu->conf->status = error_code;
 
 	return 0;
 }
@@ -1138,7 +1141,8 @@ static int dune_exit_group(int error_code)
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
 	vcpu->shutdown = 1;
-	vcpu->ret_code = error_code;
+	vcpu->ret_code = DUNE_RET_EXIT;
+	vcpu->conf->status = error_code;
 
 	return 0;
 }
@@ -1410,7 +1414,7 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 		printk(KERN_ERR "vmx: page fault failure "
 		       "GPA: 0x%lx, GVA: 0x%lx\n",
 		       gpa, gva);
-		vcpu->ret_code = ((EFAULT) << 8);
+		vcpu->ret_code = DUNE_RET_EPT_VIOLATION;
 		vmx_dump_cpu(vcpu);
 	}
 
@@ -1486,7 +1490,7 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 		return 0;
 
 	printk(KERN_ERR "vmx: unhandled nmi, intr_info %x\n", intr_info);
-	vcpu->ret_code = ((EFAULT) << 8);
+	vcpu->ret_code = DUNE_RET_NMI_EXCEPTION;
 	return -EIO;
 }
 
@@ -1544,7 +1548,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 
 			if (signr == SIGKILL) {
 				printk(KERN_INFO "vmx: got sigkill, dying");
-				vcpu->ret_code = ((ENOSYS) << 8);
+				vcpu->ret_code = DUNE_RET_SIGKILL;
 				break;
 			}
 
@@ -1587,6 +1591,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT) {
 			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
 			       ret, vmcs_read32(EXIT_QUALIFICATION));
+			vcpu->ret_code = DUNE_RET_UNHANDLED_VMEXIT;
 			vmx_dump_cpu(vcpu);
 			done = 1;
 		}

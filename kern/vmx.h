@@ -76,6 +76,7 @@ struct vmx_vcpu {
 
 	struct vmcs *vmcs;
 	void *syscall_tbl;
+	struct dune_config *conf;
 };
 
 extern __init int vmx_init(void);

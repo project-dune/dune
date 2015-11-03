@@ -79,3 +79,9 @@ struct dune_layout {
 #define DUNE_CFG_RFLAGS 0x90
 #define DUNE_CFG_CR3 0x98
 #define DUNE_CFG_STATUS 0xa0
+
+#define DUNE_RET_EXIT 1
+#define DUNE_RET_EPT_VIOLATION 2
+#define DUNE_RET_NMI_EXCEPTION 3
+#define DUNE_RET_SIGKILL 4
+#define DUNE_RET_UNHANDLED_VMEXIT 5
