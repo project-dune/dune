@@ -563,20 +563,22 @@ static void map_stack(void)
 
 static int do_dune_enter(struct dune_percpu *percpu)
 {
-	struct dune_config conf;
+	struct dune_config *conf;
 	int ret;
 
 	map_stack();
 
-	conf.rip = (__u64) &__dune_ret;
-	conf.rsp = 0;
-	conf.cr3 = (physaddr_t) pgroot;
-	conf.rflags = 0x2;
+	conf = malloc(sizeof(struct dune_config));
+
+	conf->rip = (__u64) &__dune_ret;
+	conf->rsp = 0;
+	conf->cr3 = (physaddr_t) pgroot;
+	conf->rflags = 0x2;
 
 	/* NOTE: We don't setup the general purpose registers because __dune_ret
 	 * will restore them as they were before the __dune_enter call */
 
-	ret = __dune_enter(dune_fd, &conf);
+	ret = __dune_enter(dune_fd, conf);
 	if (ret) {
 		printf("dune: entry to Dune mode failed, ret is %d\n", ret);
 		return -EIO;
