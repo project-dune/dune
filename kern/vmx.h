@@ -49,6 +49,7 @@ enum vmx_reg {
 };
 
 struct vmx_vcpu {
+	struct list_head list;
 	int cpu;
 	int vpid;
 	int launched;
@@ -81,6 +82,7 @@ struct vmx_vcpu {
 
 extern __init int vmx_init(void);
 extern void vmx_exit(void);
+extern void vmx_cleanup(void);
 
 extern int vmx_launch(struct dune_config *conf, int64_t *ret_code);
 

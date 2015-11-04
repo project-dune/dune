@@ -80,6 +80,8 @@ static DEFINE_PER_CPU(struct desc_ptr, host_gdt);
 static DEFINE_PER_CPU(int, vmx_enabled);
 DEFINE_PER_CPU(struct vmx_vcpu *, local_vcpu);
 
+static LIST_HEAD(vcpus);
+
 static struct vmcs_config {
 	int size;
 	int order;
@@ -1057,6 +1059,8 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 
 	memset(vcpu, 0, sizeof(*vcpu));
 
+	list_add(&vcpu->list, &vcpus);
+
 	vcpu->conf = conf;
 
 	vcpu->vmcs = vmx_alloc_vmcs();
@@ -1113,6 +1117,18 @@ static void vmx_destroy_vcpu(struct vmx_vcpu *vcpu)
 	vmx_free_vpid(vcpu);
 	vmx_free_vmcs(vcpu->vmcs);
 	kfree(vcpu);
+}
+
+void vmx_cleanup(void)
+{
+	struct vmx_vcpu *vcpu, *tmp;
+
+	list_for_each_entry_safe(vcpu, tmp, &vcpus, list) {
+		printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n",
+		       vcpu->vpid);
+		list_del(&vcpu->list);
+		vmx_destroy_vcpu(vcpu);
+	}
 }
 
 static int dune_exit(int error_code)
@@ -1600,11 +1616,10 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			break;
 	}
 
-	printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n",
+	printk(KERN_ERR "vmx: stopping VCPU (VPID %d)\n",
 	       vcpu->vpid);
 
 	*ret_code = vcpu->ret_code;
-	vmx_destroy_vcpu(vcpu);
 
 	return 0;
 }
@@ -1777,6 +1792,7 @@ failed1:
  */
 void vmx_exit(void)
 {
+	vmx_cleanup();
 	on_each_cpu(vmx_disable, NULL, 1);
 	vmx_free_vmxon_areas();
 	free_page((unsigned long)msr_bitmap);

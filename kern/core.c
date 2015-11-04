@@ -117,6 +117,12 @@ out:
 	return r;
 }
 
+static int dune_dev_release(struct inode *inode, struct file *file)
+{
+	vmx_cleanup();
+	return 0;
+}
+
 static const struct file_operations dune_chardev_ops = {
 	.owner		= THIS_MODULE,
 	.unlocked_ioctl	= dune_dev_ioctl,
@@ -124,6 +130,7 @@ static const struct file_operations dune_chardev_ops = {
 	.compat_ioctl	= dune_dev_ioctl,
 #endif
 	.llseek		= noop_llseek,
+	.release	= dune_dev_release,
 };
 
 static struct miscdevice dune_dev = {
