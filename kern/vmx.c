@@ -58,6 +58,7 @@
 #include <asm/unistd_64.h>
 #include <asm/virtext.h>
 #include <asm/i387.h>
+#include <asm/traps.h>
 
 #include "dune.h"
 #include "vmx.h"
@@ -983,6 +984,8 @@ static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
 
 	//kvm_write_tsc(&vmx->vcpu, 0);
 	vmcs_writel(TSC_OFFSET, 0);
+
+	vmcs_write32(EXCEPTION_BITMAP, 1 << X86_TRAP_DB | 1 << X86_TRAP_BP);
 
 	vmx_setup_constant_host_state();
 }
