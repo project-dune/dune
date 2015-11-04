@@ -687,6 +687,7 @@ int dune_init(bool map_full)
 	BUILD_ASSERT(DUNE_CFG_RIP == offsetof(struct dune_config, rip));
 	BUILD_ASSERT(DUNE_CFG_RFLAGS == offsetof(struct dune_config, rflags));
 	BUILD_ASSERT(DUNE_CFG_CR3 == offsetof(struct dune_config, cr3));
+	BUILD_ASSERT(DUNE_CFG_STATUS == offsetof(struct dune_config, status));
 
 	dune_fd = open("/dev/dune", O_RDWR);
 	if (dune_fd <= 0) {
