@@ -610,8 +610,8 @@ void on_dune_exit(struct dune_config *conf)
 	case DUNE_RET_EPT_VIOLATION:
 		printf("dune: exit due to EPT violation\n");
 		break;
-	case DUNE_RET_NMI_EXCEPTION:
-		printf("dune: exit due to NMI exception\n");
+	case DUNE_RET_INTERRUPT:
+		printf("dune: exit due to interrupt %lld\n", conf->status);
 		break;
 	case DUNE_RET_SIGKILL:
 		printf("dune: exit due to SIGKILL\n");

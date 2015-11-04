@@ -1542,8 +1542,9 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 	if ((intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR)
 		return 0;
 
-	printk(KERN_ERR "vmx: unhandled nmi, intr_info %x\n", intr_info);
-	vcpu->ret_code = DUNE_RET_NMI_EXCEPTION;
+	printk(KERN_ERR "vmx: got interrupt, intr_info %x\n", intr_info);
+	vcpu->ret_code = DUNE_RET_INTERRUPT;
+	vcpu->conf->status = intr_info & INTR_INFO_VECTOR_MASK;
 	return -EIO;
 }
 
