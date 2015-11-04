@@ -570,6 +570,7 @@ static int do_dune_enter(struct dune_percpu *percpu)
 
 	conf = malloc(sizeof(struct dune_config));
 
+	conf->vcpu = 0;
 	conf->rip = (__u64) &__dune_ret;
 	conf->rsp = 0;
 	conf->cr3 = (physaddr_t) pgroot;
@@ -690,6 +691,7 @@ int dune_init(bool map_full)
 	BUILD_ASSERT(DUNE_CFG_RFLAGS == offsetof(struct dune_config, rflags));
 	BUILD_ASSERT(DUNE_CFG_CR3 == offsetof(struct dune_config, cr3));
 	BUILD_ASSERT(DUNE_CFG_STATUS == offsetof(struct dune_config, status));
+	BUILD_ASSERT(DUNE_CFG_VCPU == offsetof(struct dune_config, vcpu));
 
 	dune_fd = open("/dev/dune", O_RDWR);
 	if (dune_fd <= 0) {

@@ -42,6 +42,7 @@ struct dune_config {
 	__u64 rflags;
 	__u64 cr3;
 	__s64 status;
+	__u64 vcpu;
 } __attribute__((packed));
 
 struct dune_layout {
@@ -56,7 +57,7 @@ struct dune_layout {
 
 #endif /* __ASSEMBLY__ */
 
-#define IOCTL_DUNE_ENTER 0x80a8e901
+#define IOCTL_DUNE_ENTER 0x80b0e901
 
 #define DUNE_CFG_RET 0x00
 #define DUNE_CFG_RAX 0x08
@@ -79,6 +80,7 @@ struct dune_layout {
 #define DUNE_CFG_RFLAGS 0x90
 #define DUNE_CFG_CR3 0x98
 #define DUNE_CFG_STATUS 0xa0
+#define DUNE_CFG_VCPU 0xa8
 
 #define DUNE_RET_EXIT 1
 #define DUNE_RET_EPT_VIOLATION 2

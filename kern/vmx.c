@@ -1078,7 +1078,18 @@ static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config
  */
 static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 {
-	struct vmx_vcpu *vcpu = kmalloc(sizeof(struct vmx_vcpu), GFP_KERNEL);
+	struct vmx_vcpu *vcpu;
+
+	if (conf->vcpu) {
+		/* This Dune configuration already has a VCPU. */
+		vcpu = (struct vmx_vcpu *) conf->vcpu;
+		vmx_get_cpu(vcpu);
+		vmx_setup_registers(vcpu, conf);
+		vmx_put_cpu(vcpu);
+		return vcpu;
+	}
+
+	vcpu = kmalloc(sizeof(struct vmx_vcpu), GFP_KERNEL);
 	if (!vcpu)
 		return NULL;
 
@@ -1087,6 +1098,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	list_add(&vcpu->list, &vcpus);
 
 	vcpu->conf = conf;
+	conf->vcpu = (u64) vcpu;
 
 	vcpu->vmcs = vmx_alloc_vmcs();
 	if (!vcpu->vmcs)
