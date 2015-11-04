@@ -87,3 +87,4 @@ struct dune_layout {
 #define DUNE_RET_NMI_EXCEPTION 3
 #define DUNE_RET_SIGKILL 4
 #define DUNE_RET_UNHANDLED_VMEXIT 5
+#define DUNE_RET_NOENTER 6

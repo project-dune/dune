@@ -195,9 +195,29 @@ __dune_enter:
 
 	cmpq	$0, %rax
 	jnz __dune_ret_fail
-	movq	DUNE_CFG_RET(%rdx), %rdi
-	movq	$60, %rax /* __NR_exit */
+
+	movq	%rdi, %r12
+	movq	%rdx, %r13
+
+__dune_retry:
+	/* Dune mode was terminated, call on_dune_exit handler function */
+	movq	%r13, %rdi
+	/* Update RSP to point to the top of the stack as seen from inside Dune
+	 * mode. */
+	movq	DUNE_CFG_RSP(%rdi), %rsp
+	call	on_dune_exit
+	int3 /* sentinel: on_dune_exit should not return */
+__dune_reenter:
+	movq	%r12, %rdi
+	movq	%r13, %rdx
+	movq	$IOCTL_DUNE_ENTER, %rsi
+	movq	$16, %rax /* __NR_ioctl */
 	syscall
+	cmpq	$0, %rax
+	jz	__dune_retry
+	movq	%rax, DUNE_CFG_STATUS(%r13)
+	movq	$DUNE_RET_NOENTER, DUNE_CFG_RET(%r13)
+	jmp	__dune_retry
 
 /* __dune_ret is the location of the first instruction executed in Dune mode */
 .globl	__dune_ret

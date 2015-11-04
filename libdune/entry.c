@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <stdlib.h>
 
 #include "dune.h"
 #include "mmu.h"
@@ -592,6 +593,40 @@ static int do_dune_enter(struct dune_percpu *percpu)
 	}
 
 	return 0;
+}
+
+/**
+ * on_dune_exit - handle Dune exits
+ *
+ * This function must not return.
+ */
+void on_dune_exit(struct dune_config *conf)
+{
+	switch (conf->ret) {
+	case DUNE_RET_EXIT:
+		printf("dune: normal exit, status=%lld\n", conf->status);
+		exit(conf->status);
+	case DUNE_RET_EPT_VIOLATION:
+		printf("dune: exit due to EPT violation\n");
+		break;
+	case DUNE_RET_NMI_EXCEPTION:
+		printf("dune: exit due to NMI exception\n");
+		break;
+	case DUNE_RET_SIGKILL:
+		printf("dune: exit due to SIGKILL\n");
+		break;
+	case DUNE_RET_UNHANDLED_VMEXIT:
+		printf("dune: exit due to unhandled VM exit\n");
+		break;
+	case DUNE_RET_NOENTER:
+		printf("dune: re-entry to Dune mode failed, status is %lld\n", conf->status);
+		break;
+	default:
+		printf("dune: unknown exit from Dune, ret=%lld, status=%lld\n", conf->ret, conf->status);
+		break;
+	}
+
+	exit(EXIT_FAILURE);
 }
 
 /**
