@@ -231,6 +231,37 @@ __dune_ret_fail:
 	popfq
 	retq
 
+.globl __dune_go_linux
+__dune_go_linux:
+	movq DUNE_CFG_RCX(%rdi), %rcx
+	movq DUNE_CFG_RBX(%rdi), %rbx
+	movq DUNE_CFG_RDI(%rdi), %rdx
+	movq DUNE_CFG_RBP(%rdi), %rbp
+	movq DUNE_CFG_RSI(%rdi), %rsi
+	movq DUNE_CFG_R8 (%rdi), %r8
+	movq DUNE_CFG_R9 (%rdi), %r9
+	movq DUNE_CFG_R10(%rdi), %r10
+	movq DUNE_CFG_R11(%rdi), %r11
+	movq DUNE_CFG_R12(%rdi), %r12
+	movq DUNE_CFG_R13(%rdi), %r13
+	movq DUNE_CFG_R14(%rdi), %r14
+	movq DUNE_CFG_R15(%rdi), %r15
+	mov %ss, %rax
+	push %rax
+	pushq DUNE_CFG_RSP(%rdi)
+	pushq DUNE_CFG_RFLAGS(%rdi)
+	mov %cs, %rax
+	push %rax
+	pushq DUNE_CFG_RIP(%rdi)
+	pushq DUNE_CFG_RFLAGS(%rdi)
+	movq DUNE_CFG_RAX(%rdi), %rax
+	movq DUNE_CFG_RDX(%rdi), %rdi
+	/* We are restoring the flags here, so that RFLAGS.TF is set when IRETQ is
+	 * executed, so that an INT 1 will be raised _before_ executing the
+	 * instruction at CS:RIP we are jumping to. */
+	popf
+	iretq
+
 /*
  * System Call ABI
  * ---------------

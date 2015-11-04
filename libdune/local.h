@@ -14,6 +14,7 @@ extern int __dune_ret(void);
 extern void __dune_syscall(void);
 extern void __dune_syscall_end(void);
 extern void __dune_intr(void);
+extern void __dune_go_linux(struct dune_config *config);
 
 // assembly routine for handling vsyscalls
 extern char __dune_vsyscall_page;
