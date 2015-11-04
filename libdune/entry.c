@@ -598,7 +598,8 @@ static int do_dune_enter(struct dune_percpu *percpu)
 /**
  * on_dune_exit - handle Dune exits
  *
- * This function must not return.
+ * This function must not return. It can either exit(), __dune_go_dune() or
+ * __dune_go_linux().
  */
 void on_dune_exit(struct dune_config *conf)
 {

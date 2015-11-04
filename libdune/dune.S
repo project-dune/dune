@@ -262,6 +262,12 @@ __dune_go_linux:
 	popf
 	iretq
 
+.globl __dune_go_dune
+__dune_go_dune:
+	movq	%rdi, %r12
+	movq	%rsi, %r13
+	jmp	__dune_reenter
+
 /*
  * System Call ABI
  * ---------------
