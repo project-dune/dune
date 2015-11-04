@@ -26,6 +26,7 @@
 #include "mmu.h"
 #include "cpu-x86.h"
 #include "local.h"
+#include "debug.h"
 
 #define BUILD_ASSERT(cond) do { (void) sizeof(char [1 - 2*!(cond)]); } while(0)
 
@@ -34,7 +35,7 @@ uintptr_t phys_limit;
 uintptr_t mmap_base;
 uintptr_t stack_base;
 
-static int dune_fd;
+int dune_fd;
 
 static struct idtd idt[IDT_ENTRIES];
 
@@ -611,6 +612,7 @@ void on_dune_exit(struct dune_config *conf)
 		printf("dune: exit due to EPT violation\n");
 		break;
 	case DUNE_RET_INTERRUPT:
+		dune_debug_handle_int(conf);
 		printf("dune: exit due to interrupt %lld\n", conf->status);
 		break;
 	case DUNE_RET_SIGKILL:

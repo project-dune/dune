@@ -2,6 +2,8 @@
  * dune.h - public header for Dune support
  */
 
+#pragma once
+
 #ifndef __ASSEMBLY__
 
 #include <linux/types.h>
