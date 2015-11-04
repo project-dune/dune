@@ -1047,6 +1047,31 @@ static void vmx_setup_registers(struct vmx_vcpu *vcpu, struct dune_config *conf)
 }
 
 /**
+ * vmx_copy_registers_to_conf - copy registers to dune_config
+ */
+static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config *conf)
+{
+	conf->rax = vcpu->regs[VCPU_REGS_RAX];
+	conf->rbx = vcpu->regs[VCPU_REGS_RBX];
+	conf->rcx = vcpu->regs[VCPU_REGS_RCX];
+	conf->rdx = vcpu->regs[VCPU_REGS_RDX];
+	conf->rsi = vcpu->regs[VCPU_REGS_RSI];
+	conf->rdi = vcpu->regs[VCPU_REGS_RDI];
+	conf->rbp = vcpu->regs[VCPU_REGS_RBP];
+	conf->r8 = vcpu->regs[VCPU_REGS_R8];
+	conf->r9 = vcpu->regs[VCPU_REGS_R9];
+	conf->r10 = vcpu->regs[VCPU_REGS_R10];
+	conf->r11 = vcpu->regs[VCPU_REGS_R11];
+	conf->r12 = vcpu->regs[VCPU_REGS_R12];
+	conf->r13 = vcpu->regs[VCPU_REGS_R13];
+	conf->r14 = vcpu->regs[VCPU_REGS_R14];
+	conf->r15 = vcpu->regs[VCPU_REGS_R15];
+	conf->rip = vmcs_readl(GUEST_RIP);
+	conf->rsp = vmcs_readl(GUEST_RSP);
+	conf->rflags = vmcs_readl(GUEST_RFLAGS);
+}
+
+/**
  * vmx_create_vcpu - allocates and initializes a new virtual cpu
  *
  * Returns: A new VCPU structure
@@ -1620,6 +1645,8 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 	       vcpu->vpid);
 
 	*ret_code = vcpu->ret_code;
+
+	vmx_copy_registers_to_conf(vcpu, conf);
 
 	return 0;
 }
