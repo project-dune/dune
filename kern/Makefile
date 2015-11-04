@@ -12,7 +12,8 @@ obj-$(CONFIG_DUNE) += dune.o
 dune-objs := \
 	core.o \
 	vmx.o \
-	ept.o
+	ept.o \
+	preempttrap.o
 
 # KSRC should be set to the path to your sources
 # modules are installed into KMISC
