@@ -745,6 +745,7 @@ fail:
 
 void vmx_destroy_ept(struct vmx_vcpu *vcpu)
 {
-	mmu_notifier_unregister(&vcpu->mmu_notifier, current->mm);
+	if (current->mm)
+		mmu_notifier_unregister(&vcpu->mmu_notifier, current->mm);
 	vmx_free_ept(vcpu->ept_root);
 }
