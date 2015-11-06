@@ -235,7 +235,7 @@ __dune_ret_fail:
 __dune_go_linux:
 	movq DUNE_CFG_RCX(%rdi), %rcx
 	movq DUNE_CFG_RBX(%rdi), %rbx
-	movq DUNE_CFG_RDI(%rdi), %rdx
+	movq DUNE_CFG_RDX(%rdi), %rdx
 	movq DUNE_CFG_RBP(%rdi), %rbp
 	movq DUNE_CFG_RSI(%rdi), %rsi
 	movq DUNE_CFG_R8 (%rdi), %r8
@@ -255,7 +255,7 @@ __dune_go_linux:
 	pushq DUNE_CFG_RIP(%rdi)
 	pushq DUNE_CFG_RFLAGS(%rdi)
 	movq DUNE_CFG_RAX(%rdi), %rax
-	movq DUNE_CFG_RDX(%rdi), %rdi
+	movq DUNE_CFG_RDI(%rdi), %rdi
 	/* We are restoring the flags here, so that RFLAGS.TF is set when IRETQ is
 	 * executed, so that an INT 1 will be raised _before_ executing the
 	 * instruction at CS:RIP we are jumping to. */
