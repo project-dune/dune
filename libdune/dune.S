@@ -205,6 +205,8 @@ __dune_retry:
 	/* Update RSP to point to the top of the stack as seen from inside Dune
 	 * mode. */
 	movq	DUNE_CFG_RSP(%rdi), %rsp
+	/* Go past the red zone mandated by the System V x86-64 ABI. */
+	subq	$128, %rsp
 	call	on_dune_exit
 	int3 /* sentinel: on_dune_exit should not return */
 __dune_reenter:

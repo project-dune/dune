@@ -56,6 +56,8 @@ static void notifier_sched_in(struct preempt_notifier *notifier, int cpu)
 			regs->ip = (__u64) trap_conf.notify_func;
 			regs->di = (__u64) trap_conf.regs;
 			regs->si = (__u64) trap_conf.priv;
+			/* Go past the red zone mandated by the System V x86-64 ABI. */
+			regs->sp -= 128;
 		}
 	}
 }
