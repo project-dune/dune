@@ -191,7 +191,7 @@ ept_lookup_gpa(struct vmx_vcpu *vcpu, void *gpa, int level,
 		}
 
 		if (epte_big(dir[idx])) {
-			if (i != 1 || i != 2)
+			if (i != 1 && i != 2)
 				return -EINVAL;
 			level = i;
 			break;
