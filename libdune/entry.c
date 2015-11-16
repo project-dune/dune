@@ -615,8 +615,8 @@ void on_dune_exit(struct dune_config *conf)
 		dune_debug_handle_int(conf);
 		printf("dune: exit due to interrupt %lld\n", conf->status);
 		break;
-	case DUNE_RET_SIGKILL:
-		printf("dune: exit due to SIGKILL\n");
+	case DUNE_RET_SIGNAL:
+		__dune_go_dune(dune_fd, conf);
 		break;
 	case DUNE_RET_UNHANDLED_VMEXIT:
 		printf("dune: exit due to unhandled VM exit\n");

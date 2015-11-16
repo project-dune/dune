@@ -1479,6 +1479,8 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 
 static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 {
+	__u64 orig_rax;
+
 	if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
 		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
 		return;
@@ -1490,6 +1492,8 @@ static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
 		return;
 	}
+
+	orig_rax = vcpu->regs[VCPU_REGS_RAX];
 
 	asm(
 		"mov %c[rax](%0), %%"R"ax \n\t"
@@ -1519,6 +1523,25 @@ static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 		[r9]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R9]))
 	      : "cc", "memory", R"ax", R"dx", R"di", R"si", "r8", "r9", "r10"
 	);
+
+	/* We apply the restart semantics as if no signal handler will be
+	 * executed. */
+	switch (vcpu->regs[VCPU_REGS_RAX]) {
+	case -ERESTARTNOHAND:
+	case -ERESTARTSYS:
+	case -ERESTARTNOINTR:
+		vcpu->regs[VCPU_REGS_RAX] = orig_rax;
+		vmx_get_cpu(vcpu);
+		vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
+		vmx_put_cpu(vcpu);
+		break;
+	case -ERESTART_RESTARTBLOCK:
+		vcpu->regs[VCPU_REGS_RAX] = __NR_restart_syscall;
+		vmx_get_cpu(vcpu);
+		vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
+		vmx_put_cpu(vcpu);
+		break;
+	}
 }
 
 static void vmx_handle_cpuid(struct vmx_vcpu *vcpu)
@@ -1589,31 +1612,13 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		}
 
 		if (signal_pending(current)) {
-			int signr;
-			siginfo_t info;
-			uint32_t x;
 
 			local_irq_enable();
 			vmx_put_cpu(vcpu);
 
-			spin_lock_irq(&current->sighand->siglock);
-			signr = dequeue_signal(current, &current->blocked,
-					       &info);
-			spin_unlock_irq(&current->sighand->siglock);
-			if (!signr)
-				continue;
 
-			if (signr == SIGKILL) {
-				printk(KERN_INFO "vmx: got sigkill, dying");
-				vcpu->ret_code = DUNE_RET_SIGKILL;
-				break;
-			}
-
-			x  = DUNE_SIGNAL_INTR_BASE + signr;
-			x |= INTR_INFO_VALID_MASK;
-
-			vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, x);
-			continue;
+			vcpu->ret_code = DUNE_RET_SIGNAL;
+			break;
 		}
 
 		setup_perf_msrs(vcpu);
