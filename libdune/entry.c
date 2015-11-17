@@ -765,6 +765,7 @@ int dune_init(bool map_full)
 		struct sigaction sa;
 
 		switch (i) {
+		case SIGTSTP:
 		case SIGSTOP:
 		case SIGKILL:
 		case SIGCHLD:
