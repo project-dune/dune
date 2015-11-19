@@ -229,6 +229,19 @@ static void free_ept_page(epte_t epte)
 		return;
 
 	if (epte & __EPTE_WRITE)
+		set_page_dirty(page);
+	put_page(page);
+}
+
+static void free_ept_page_lock(epte_t epte)
+{
+	struct page *page = pfn_to_page(epte_addr(epte) >> PAGE_SHIFT);
+
+	/* PFN mapppings are not backed by pages. */
+	if (epte & __EPTE_PFNMAP)
+		return;
+
+	if (epte & __EPTE_WRITE)
 		set_page_dirty_lock(page);
 	put_page(page);
 }
@@ -248,7 +261,7 @@ static void vmx_free_ept(unsigned long ept_root)
 			if (!epte_present(pud[j]))
 				continue;
 			if (epte_flags(pud[j]) & __EPTE_SZ) {
-				free_ept_page(pud[j]);
+				free_ept_page_lock(pud[j]);
 				continue;
 			}
 
@@ -257,7 +270,7 @@ static void vmx_free_ept(unsigned long ept_root)
 				if (!epte_present(pmd[k]))
 					continue;
 				if (epte_flags(pmd[k]) & __EPTE_SZ) {
-					free_ept_page(pmd[k]);
+					free_ept_page_lock(pmd[k]);
 					continue;
 				}
 
@@ -265,7 +278,7 @@ static void vmx_free_ept(unsigned long ept_root)
 					if (!epte_present(pte[l]))
 						continue;
 
-					free_ept_page(pte[l]);
+					free_ept_page_lock(pte[l]);
 				}
 
 				free_page((unsigned long) pte);
