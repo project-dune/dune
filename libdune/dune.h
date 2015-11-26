@@ -9,6 +9,7 @@
 #include "mmu.h"
 #include "elf.h"
 #include "fpu.h"
+#include "../kern/dune.h"
 
 typedef void (*sighandler_t)(int);
 
