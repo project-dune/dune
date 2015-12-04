@@ -367,6 +367,7 @@ static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 	epte_t *epte, flags;
 	unsigned long pfn;
 	int ret;
+	int cache_control;
 
 	down_read(&mm->mmap_sem);
 	vma = find_vma(mm, hva);
@@ -385,6 +386,14 @@ static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 		up_read(&mm->mmap_sem);
 		return ret;
 	}
+
+	if ((pgprot_val(vma->vm_page_prot) & _PAGE_CACHE_MASK) == _PAGE_CACHE_WB)
+		cache_control = EPTE_TYPE_WB;
+	else if ((pgprot_val(vma->vm_page_prot) & _PAGE_CACHE_MASK) == _PAGE_CACHE_WC)
+		cache_control = EPTE_TYPE_WC;
+	else
+		cache_control = EPTE_TYPE_UC;
+
 	up_read(&mm->mmap_sem);
 
 	/* NOTE: pfn's can not be huge pages, which is quite a relief here */
@@ -396,7 +405,7 @@ static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 		return ret;
 	}
 
-	flags = __EPTE_READ | __EPTE_TYPE(EPTE_TYPE_UC) |
+	flags = __EPTE_READ | __EPTE_TYPE(cache_control) |
 		__EPTE_IPAT | __EPTE_PFNMAP;
 	if (make_write)
 		flags |= __EPTE_WRITE;
