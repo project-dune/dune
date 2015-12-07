@@ -68,6 +68,8 @@ static int get_type(const char *path)
 		return PROCMAP_TYPE_VSYSCALL;
 	if (strcmp(path, "[vdso]") == 0)
 		return PROCMAP_TYPE_VDSO;
+	if (strcmp(path, "[vvar]") == 0)
+		return PROCMAP_TYPE_VVAR;
 	return PROCMAP_TYPE_UNKNOWN;
 }
 

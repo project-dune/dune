@@ -282,6 +282,15 @@ static void __setup_mappings_cb(const struct dune_procmap_entry *ent)
 		return;
 	}
 
+	if (ent->type == PROCMAP_TYPE_VDSO) {
+		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R | PERM_X);
+		return;
+	}
+
+	if (ent->type == PROCMAP_TYPE_VVAR) {
+		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R);
+		return;
+	}
 
 	if (ent->r)
 		perm |= PERM_R;
@@ -313,6 +322,19 @@ static int __setup_mappings_precise(void)
 	return 0;
 }
 
+static void setup_vdso_cb(const struct dune_procmap_entry *ent)
+{
+	if (ent->type == PROCMAP_TYPE_VDSO) {
+		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R | PERM_X);
+		return;
+	}
+
+	if (ent->type == PROCMAP_TYPE_VVAR) {
+		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R);
+		return;
+	}
+}
+
 static int __setup_mappings_full(struct dune_layout *layout)
 {
 	int ret;
@@ -335,6 +357,7 @@ static int __setup_mappings_full(struct dune_layout *layout)
 	if (ret)
 		return ret;
 
+	dune_procmap_iterate(setup_vdso_cb);
 	setup_vsyscall();
 
 	return 0;

@@ -282,6 +282,7 @@ extern int dune_vm_page_walk(ptent_t *root, void *start_va, void *end_va,
 #define PROCMAP_TYPE_STACK	0x04
 #define PROCMAP_TYPE_VSYSCALL	0x05
 #define PROCMAP_TYPE_VDSO	0x06
+#define PROCMAP_TYPE_VVAR	0x07
 
 struct dune_procmap_entry {
 	uintptr_t	begin;
