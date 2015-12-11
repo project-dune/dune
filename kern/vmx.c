@@ -44,7 +44,6 @@
 #include <linux/highmem.h>
 #include <linux/sched.h>
 #include <linux/moduleparam.h>
-#include <linux/ftrace_event.h>
 #include <linux/slab.h>
 #include <linux/tboot.h>
 #include <linux/init.h>
@@ -57,7 +56,6 @@
 #include <asm/vmx.h>
 #include <asm/unistd_64.h>
 #include <asm/virtext.h>
-#include <asm/i387.h>
 #include <asm/traps.h>
 
 #include "dune.h"
@@ -507,7 +505,7 @@ static void vmx_setup_constant_host_state(void)
 	struct desc_ptr dt;
 
 	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS);  /* 22.2.3 */
-	vmcs_writel(HOST_CR4, read_cr4());  /* 22.2.3, 22.2.5 */
+	vmcs_writel(HOST_CR4, __read_cr4());  /* 22.2.3, 22.2.5 */
 	vmcs_writel(HOST_CR3, read_cr3());  /* 22.2.3 */
 
 	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);  /* 22.2.4 */
@@ -558,7 +556,7 @@ static inline u16 vmx_read_ldt(void)
 
 static unsigned long segment_base(u16 selector)
 {
-	struct desc_ptr *gdt = &__get_cpu_var(host_gdt);
+	struct desc_ptr *gdt = this_cpu_ptr(&host_gdt);
 	struct desc_struct *d;
 	unsigned long table_base;
 	unsigned long v;
@@ -594,7 +592,7 @@ static inline unsigned long vmx_read_tr_base(void)
 
 static void __vmx_setup_cpu(void)
 {
-	struct desc_ptr *gdt = &__get_cpu_var(host_gdt);
+	struct desc_ptr *gdt = this_cpu_ptr(&host_gdt);
 	unsigned long sysenter_esp;
 	unsigned long tmpl;
 
@@ -620,8 +618,8 @@ static void __vmx_get_cpu_helper(void *ptr)
 
 	BUG_ON(raw_smp_processor_id() != vcpu->cpu);
 	vmcs_clear(vcpu->vmcs);
-	if (__get_cpu_var(local_vcpu) == vcpu)
-		__get_cpu_var(local_vcpu) = NULL;
+	if (__this_cpu_read(local_vcpu) == vcpu)
+		this_cpu_write(local_vcpu, NULL);
 }
 
 /**
@@ -634,8 +632,8 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 {
 	int cur_cpu = get_cpu();
 
-	if (__get_cpu_var(local_vcpu) != vcpu) {
-		__get_cpu_var(local_vcpu) = vcpu;
+	if (__this_cpu_read(local_vcpu) != vcpu) {
+		this_cpu_write(local_vcpu, vcpu);
 
 		if (vcpu->cpu != cur_cpu) {
 			if (vcpu->cpu >= 0)
@@ -1152,7 +1150,7 @@ static void vmx_destroy_vcpu(struct vmx_vcpu *vcpu)
 	vmx_get_cpu(vcpu);
 	ept_sync_context(vcpu->eptp);
 	vmcs_clear(vcpu->vmcs);
-	__get_cpu_var(local_vcpu) = NULL;
+	this_cpu_write(local_vcpu, NULL);
 	vmx_put_cpu(vcpu);
 	vmx_free_vpid(vcpu);
 	vmx_free_vmcs(vcpu->vmcs);
@@ -1247,6 +1245,24 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	regs->ss = __USER_DS;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
+		void __user *parent_tid, void __user *child_tid,
+		unsigned long tls)
+{
+	struct vmx_vcpu *vcpu;
+	struct pt_regs regs;
+
+	asm("movq %%r11, %0" : "=r"(vcpu));
+
+	make_pt_regs(vcpu, &regs, __NR_clone);
+	if (!newsp)
+		newsp = regs.sp;
+
+	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
+			    tls);
+}
+#else
 static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
 		void __user *parent_tid, void __user *child_tid)
 {
@@ -1259,8 +1275,10 @@ static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
 	if (!newsp)
 		newsp = regs.sp;
 
-	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid);
+	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
+			    0);
 }
+#endif
 
 static long dune_sys_fork(void)
 {
@@ -1271,7 +1289,7 @@ static long dune_sys_fork(void)
 
 	make_pt_regs(vcpu, &regs, __NR_fork);
 
-	return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL);
+	return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL, 0);
 }
 
 static long dune_sys_vfork(void)
@@ -1284,7 +1302,7 @@ static long dune_sys_vfork(void)
 	make_pt_regs(vcpu, &regs, __NR_vfork);
 
 	return dune_do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp,
-			    &regs, 0, NULL, NULL);
+			    &regs, 0, NULL, NULL, 0);
 }
 
 static void vmx_init_syscall(void)
@@ -1599,8 +1617,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		 * that we don't monitor or trap FPU usage inside
 		 * a Dune process.
 		 */
-		if (!__thread_has_fpu(current))
-			math_state_restore();
+		compat_fpu_restore();
 
 		local_irq_disable();
 
@@ -1681,7 +1698,7 @@ static __init int __vmx_enable(struct vmcs *vmxon_buf)
 	u64 phys_addr = __pa(vmxon_buf);
 	u64 old, test_bits;
 
-	if (read_cr4() & X86_CR4_VMXE)
+	if (__read_cr4() & X86_CR4_VMXE)
 		return -EBUSY;
 
 	rdmsrl(MSR_IA32_FEATURE_CONTROL, old);
@@ -1695,7 +1712,7 @@ static __init int __vmx_enable(struct vmcs *vmxon_buf)
 		/* enable and lock */
 		wrmsrl(MSR_IA32_FEATURE_CONTROL, old | test_bits);
 	}
-	write_cr4(read_cr4() | X86_CR4_VMXE);
+	cr4_set_bits(X86_CR4_VMXE);
 
 	__vmxon(phys_addr);
 	vpid_sync_vcpu_global();
@@ -1713,13 +1730,13 @@ static __init int __vmx_enable(struct vmcs *vmxon_buf)
 static __init void vmx_enable(void *unused)
 {
 	int ret;
-	struct vmcs *vmxon_buf = __get_cpu_var(vmxarea);
+	struct vmcs *vmxon_buf = __this_cpu_read(vmxarea);
 
 	if ((ret = __vmx_enable(vmxon_buf)))
 		goto failed;
 
-	__get_cpu_var(vmx_enabled) = 1;
-	native_store_gdt(&__get_cpu_var(host_gdt));
+	this_cpu_write(vmx_enabled, 1);
+	native_store_gdt(this_cpu_ptr(&host_gdt));
 
 	printk(KERN_INFO "vmx: VMX enabled on CPU %d\n",
 	       raw_smp_processor_id());
@@ -1735,10 +1752,10 @@ failed:
  */
 static void vmx_disable(void *unused)
 {
-	if (__get_cpu_var(vmx_enabled)) {
+	if (__this_cpu_read(vmx_enabled)) {
 		__vmxoff();
-		write_cr4(read_cr4() & ~X86_CR4_VMXE);
-		__get_cpu_var(vmx_enabled) = 0;
+		cr4_clear_bits(X86_CR4_VMXE);
+		this_cpu_write(vmx_enabled, 0);
 	}
 }
 

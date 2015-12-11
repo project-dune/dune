@@ -38,7 +38,7 @@ MODULE_DESCRIPTION("A driver for Dune");
  */
 static int dune_is_in_guest(void)
 {
-	return __get_cpu_var(local_vcpu) != NULL;
+	return __this_cpu_read(local_vcpu) != NULL;
 }
 
 static int dune_is_user_mode(void)
@@ -49,7 +49,7 @@ static int dune_is_user_mode(void)
 static unsigned long dune_get_guest_ip(void)
 {
 	unsigned long long ip = 0;
-	if (__get_cpu_var(local_vcpu))
+	if (__this_cpu_read(local_vcpu))
 		ip = vmcs_readl(GUEST_RIP);
 	return ip;
 }

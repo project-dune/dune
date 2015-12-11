@@ -23,6 +23,7 @@
 
 #include "dune.h"
 #include "vmx.h"
+#include "compat.h"
 
 #define EPT_LEVELS	4	/* 0 through 3 */
 #define HUGE_PAGE_SIZE	2097152
@@ -387,9 +388,9 @@ static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 		return ret;
 	}
 
-	if ((pgprot_val(vma->vm_page_prot) & _PAGE_CACHE_MASK) == _PAGE_CACHE_WB)
+	if (pgprot2cachemode(vma->vm_page_prot) == _PAGE_CACHE_MODE_WB)
 		cache_control = EPTE_TYPE_WB;
-	else if ((pgprot_val(vma->vm_page_prot) & _PAGE_CACHE_MASK) == _PAGE_CACHE_WC)
+	else if (pgprot2cachemode(vma->vm_page_prot) == _PAGE_CACHE_MODE_WC)
 		cache_control = EPTE_TYPE_WC;
 	else
 		cache_control = EPTE_TYPE_UC;
@@ -692,6 +693,28 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 	ept_invalidate_page(vcpu, mm, address);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0)
+static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
+					      struct mm_struct *mm,
+					      unsigned long start,
+					      unsigned long end)
+{
+	int ret = 0;
+	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
+
+	pr_debug("ept: clear_flush_young start %lx end %lx\n", start, end);
+
+	if (!vcpu->ept_ad_enabled) {
+		for (; start < end; start += PAGE_SIZE)
+			ret |= ept_invalidate_page(vcpu, mm, start);
+	} else {
+		for (; start < end; start += PAGE_SIZE)
+			ret |= ept_check_page_accessed(vcpu, mm, start, true);
+	}
+
+	return ret;
+}
+#else
 static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 					      struct mm_struct *mm,
 					      unsigned long address)
@@ -705,6 +728,7 @@ static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 	else
 		return ept_check_page_accessed(vcpu, mm, address, true);
 }
+#endif
 
 static int ept_mmu_notifier_test_young(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
