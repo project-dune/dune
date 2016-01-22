@@ -476,7 +476,6 @@ void on_dune_exit(struct dune_config *conf)
 {
 	switch (conf->ret) {
 	case DUNE_RET_EXIT:
-		printf("dune: normal exit, status=%lld\n", conf->status);
 		exit(conf->status);
 	case DUNE_RET_EPT_VIOLATION:
 		printf("dune: exit due to EPT violation\n");
