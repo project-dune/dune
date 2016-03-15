@@ -410,9 +410,10 @@ __dune_intr:
 	.endr
 
 __dune_intr_with_num:
-	/* save the remaining destructable registers */
+	/* save all registers */
 	subq	$REG_END, %rsp
 	SAVE_REGS 1, 0 /* %rax already is pushed */
+	SAVE_REST
 	movq	%rax, %rdi
 
 	/* then restore the CPL0 FS base address */
@@ -431,7 +432,8 @@ __dune_intr_handler:
 	SET_G3_FS_BASE
 
 __dune_intr_done:
-	/* load only destructable registers */
+	/* load all registers */
+	RESTORE_REST
 	RESTORE_REGS
 
 	/* jump to the frame */
