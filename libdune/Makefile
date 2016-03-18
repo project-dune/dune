@@ -9,7 +9,7 @@ $(NOFPU_OBJ): EXTRA_FLAGS := -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -msoft-float
 all: libdune.a
 
 libdune.a: $(OBJ) $(NOFPU_OBJ)
-	$(AR) cru $(@) $(OBJ) $(NOFPU_OBJ)
+	$(AR) crD $(@) $(OBJ) $(NOFPU_OBJ)
 
 clean:
 	rm -f *.o test *.d libdune.a
