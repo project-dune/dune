@@ -5,6 +5,7 @@
 #pragma once
 
 #include <sys/queue.h>
+#include <stdbool.h>
 
 #include "mmu.h"
 #include "elf.h"

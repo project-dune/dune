@@ -36,6 +36,18 @@
 #define X86_CR4_FSGSBASE	X86_CR4_RDWRGSFS
 #endif
 
+#ifndef AR_TYPE_BUSY_64_TSS
+#define AR_TYPE_BUSY_64_TSS VMX_AR_TYPE_BUSY_64_TSS
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+static inline struct page *alloc_pages_exact_node(int nid, gfp_t gfp_mask,
+                                                    unsigned int order){
+	return alloc_pages_node(nid, gfp_mask, order);
+}
+#endif
+
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) & defined(_DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long, unsigned long,
                               int __user *, int __user *, unsigned long);
