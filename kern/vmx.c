@@ -73,6 +73,8 @@ static unsigned long *msr_bitmap;
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(3,11,0)
 typedef void (*sys_call_ptr_t)(void);
+#else
+#include <asm/syscall.h>
 #endif
 static sys_call_ptr_t dune_syscall_tbl[NUM_SYSCALLS] __cacheline_aligned;
 
