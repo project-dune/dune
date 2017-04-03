@@ -31,7 +31,6 @@
 #define BUILD_ASSERT(cond) do { (void) sizeof(char [1 - 2*!(cond)]); } while(0)
 
 ptent_t *pgroot;
-uintptr_t phys_limit;
 uintptr_t mmap_base;
 uintptr_t stack_base;
 
@@ -339,20 +338,20 @@ static int __setup_mappings_full(struct dune_layout *layout)
 {
 	int ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) 0, 1UL << 32,
-			      (void *) 0,
+	ret = dune_vm_map_phys(pgroot, (void *) layout->base_proc, GPA_SIZE,
+			      (void *) GPA_ADDR_PROC,
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_map, GPA_MAP_SIZE,
-			      (void *) dune_mmap_addr_to_pa((void *) layout->base_map),
+	ret = dune_vm_map_phys(pgroot, (void *) layout->base_map, GPA_SIZE,
+			      (void *) GPA_ADDR_MAP,
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_stack, GPA_STACK_SIZE,
-			      (void *) dune_stack_addr_to_pa((void *) layout->base_stack),
+	ret = dune_vm_map_phys(pgroot, (void *) layout->base_stack, GPA_SIZE,
+			      (void *) GPA_ADDR_STACK,
 			      PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
@@ -370,7 +369,6 @@ static int setup_mappings(bool full)
 	if (ret)
 		return ret;
 
-	phys_limit = layout.phys_limit;
 	mmap_base = layout.base_map;
 	stack_base = layout.base_stack;
 

@@ -178,14 +178,12 @@ extern uintptr_t stack_base;
 
 static inline uintptr_t dune_mmap_addr_to_pa(void *ptr)
 {
-	return ((uintptr_t) ptr) - mmap_base +
-		phys_limit - GPA_STACK_SIZE - GPA_MAP_SIZE;
+	return ((uintptr_t) ptr) - mmap_base + 0x400000000;
 }
 
 static inline uintptr_t dune_stack_addr_to_pa(void *ptr)
 {
-	return ((uintptr_t) ptr) - stack_base +
-		phys_limit - GPA_STACK_SIZE;
+	return ((uintptr_t) ptr) - stack_base + 0x800000000;
 }
 
 static inline uintptr_t dune_va_to_pa(void *ptr)
