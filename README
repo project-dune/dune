@@ -9,6 +9,10 @@ is available here:
 
 	http://dune.scs.stanford.edu/
 
+This work was published on OSDI'12:
+
+	http://dl.acm.org/citation.cfm?id=2387913
+
 Dune has two components:
 
 1.  A kernel module to enable virtualization (kern)
@@ -83,10 +87,18 @@ Programming
     use sockets, access files, etc.
 3.  But you can then also perform privileged CPU instructions.
 
+Contributing
+=============
+Found a bug and know how to fix it? Not sure if that small improvement is worth a
+pull request? Do it! It will be greatly appreciated.
+
+However, any significant improvement or change should be documented as a GitHub
+issue before anybody starts working on it.
+
 Questions?
 ==========
 
-Contact us at dune@scs.stanford.edu.
+Contact us at project-dune@googlegroups.com.
 
-Last edited: 10/05/12
+Last edited: 04/03/17
 
