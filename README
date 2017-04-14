@@ -7,7 +7,7 @@ and do things like change their own page table, register interrupt handlers and
 more, while still being able to perform normal system calls.  More information
 is available here:
 
-	http://dune.scs.stanford.edu/
+	https://github.com/project-dune
 
 This work was published on OSDI'12:
 
