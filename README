@@ -79,6 +79,16 @@ Dune is fairly far along, but could benefit from better support for signals
 and more robust pthread support inside libdune. We're currently working on
 these issues.
 
+Dune does not support kernel address space layout randomization (KASLR). For
+newer kernels, you must specify the nokaslr parameter in the kernel command
+line. Check before inserting the module by executing `cat /proc/cmdline`. If
+the command line does not include the nokaslr parameter, then you must add it.
+In order to add it in Ubuntu-based distributions, you must:
+* edit the file /etc/default/grub,
+* append nokaslr in the GRUB_CMDLINE_LINUX_DEFAULT option,
+* execute `sudo update-grub`, and
+* reboot the system.
+
 Programming
 ===========
 
