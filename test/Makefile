@@ -22,7 +22,7 @@ hugepages_mod.ko: hugepages_mod.c
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) obj-m=hugepages_mod.o CFLAGS= modules
 
 clean:
-	rm -f *.o test *.d hello test test_sandbox hugepages
+	rm -f *.o test *.d hello test timetest test_sandbox hugepages
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) obj-m=hugepages_mod.o clean
 
 -include *.d

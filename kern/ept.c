@@ -119,39 +119,48 @@ static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu,
 				struct mm_struct *mm,
 				unsigned long hva)
 {
-	uintptr_t mmap_start;
-
-	if (!mm) {
-		printk(KERN_ERR "ept: proc has no MM %d\n", current->pid);
-		return GPA_ADDR_INVAL;
-	}
+	uintptr_t mmap_start, stack_start;
+	uintptr_t phys_end = (1ULL << boot_cpu_data.x86_phys_bits);
+	uintptr_t gpa;
 
 	BUG_ON(!mm);
+	
+	mmap_start = LG_ALIGN(mm->mmap_base) - GPA_MAP_SIZE;
+	stack_start = LG_ALIGN(mm->start_stack) - GPA_STACK_SIZE;
 
-	mmap_start = LG_ALIGN(mm->mmap_base) - GPA_SIZE;
+	if (hva >= stack_start) {
+		if (hva - stack_start >= GPA_STACK_SIZE)
+			return ADDR_INVAL;
+		gpa = hva - stack_start + phys_end - GPA_STACK_SIZE;
+	} else if (hva >= mmap_start) {
+		if (hva - mmap_start >= GPA_MAP_SIZE)
+			return ADDR_INVAL;
+		gpa = hva - mmap_start + phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE;
+	} else {
+		if (hva >= phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE)
+			return ADDR_INVAL;
+		gpa = hva;
+	}
 
-	if ((hva & ~GPA_MASK) == 0)
-		return (hva & GPA_MASK) | GPA_ADDR_PROC;
-	else if (hva < LG_ALIGN(mm->mmap_base) && hva >= mmap_start)
-		return (hva - mmap_start) | GPA_ADDR_MAP;
-	else if ((hva & ~GPA_MASK) == (mm->start_stack & ~GPA_MASK))
-		return (hva & GPA_MASK) | GPA_ADDR_STACK;
-	else
-		return GPA_ADDR_INVAL;
+	return gpa;
 }
 
 static unsigned long gpa_to_hva(struct vmx_vcpu *vcpu,
 				struct mm_struct *mm,
 				unsigned long gpa)
 {
-	if ((gpa & ~GPA_MASK) == GPA_ADDR_PROC)
-		return (gpa & GPA_MASK);
-	else if ((gpa & ~GPA_MASK) == GPA_ADDR_MAP)
-		return (gpa & GPA_MASK) + LG_ALIGN(mm->mmap_base) - GPA_SIZE;
-	else if ((gpa & ~GPA_MASK) == GPA_ADDR_STACK)
-		return (gpa & GPA_MASK) | (mm->start_stack & ~GPA_MASK);
+	uintptr_t phys_end = (1ULL << boot_cpu_data.x86_phys_bits);
+
+	if (gpa < phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE)
+		return gpa;
+	else if (gpa < phys_end - GPA_STACK_SIZE)
+		return gpa - (phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE) +
+						LG_ALIGN(mm->mmap_base) - GPA_MAP_SIZE;
+	else if (gpa < phys_end)
+		return gpa - (phys_end - GPA_STACK_SIZE) +
+						LG_ALIGN(mm->start_stack) - GPA_STACK_SIZE;
 	else
-		return GPA_ADDR_INVAL;
+		return ADDR_INVAL;
 }
 
 #define ADDR_TO_IDX(la, n) \
@@ -202,7 +211,7 @@ ept_lookup(struct vmx_vcpu *vcpu, struct mm_struct *mm,
 {
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) hva);
 
-	if (gpa == (void *) GPA_ADDR_INVAL) {
+	if (gpa == (void *) ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %p is out of range\n", hva);
 		printk(KERN_ERR "ept: mem_base %lx, stack_start %lx\n",
 		       mm->mmap_base, mm->start_stack);
@@ -494,6 +503,11 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 	int ret;
 	unsigned long hva = gpa_to_hva(vcpu, current->mm, gpa);
 	int make_write = (fault_flags & VMX_EPT_FAULT_WRITE) ? 1 : 0;
+	
+	if (unlikely(hva == ADDR_INVAL)) {
+		printk(KERN_ERR "ept: gpa 0x%lx is out of range\n", gpa);
+		return -EINVAL;
+	}
 
 	pr_debug("ept: GPA: 0x%lx, GVA: 0x%lx, HVA: 0x%lx, flags: %x\n",
 		 gpa, gva, hva, fault_flags);
@@ -519,7 +533,7 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 	epte_t *epte;
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
-	if (gpa == (void *) GPA_ADDR_INVAL) {
+	if (gpa == (void *) ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
 		return 0;
 	}
@@ -556,7 +570,7 @@ static int ept_check_page_mapped(struct vmx_vcpu *vcpu,
 	epte_t *epte;
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
-	if (gpa == (void *) GPA_ADDR_INVAL) {
+	if (gpa == (void *) ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
 		return 0;
 	}
@@ -586,7 +600,7 @@ static int ept_check_page_accessed(struct vmx_vcpu *vcpu,
 	epte_t *epte;
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
-	if (gpa == (void *) GPA_ADDR_INVAL) {
+	if (gpa == (void *) ADDR_INVAL) {
 		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
 		return 0;
 	}
