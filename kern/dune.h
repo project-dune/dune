@@ -50,7 +50,7 @@ struct dune_config {
 } __attribute__((packed));
 
 struct dune_layout {
-	__u64 base_proc;
+	__u64 phys_limit;
 	__u64 base_map;
 	__u64 base_stack;
 } __attribute__((packed));
@@ -87,16 +87,10 @@ struct dune_trap_config {
 	__u8 delay;
 } __attribute__((packed));
 
-#define GPA_SIZE ((unsigned long) 1 << 34) /* 16 gigabytes */
-#define GPA_MASK (GPA_SIZE - 1)
+#define GPA_STACK_SIZE ((unsigned long) 1 << 30) /* 1 gigabyte */
+#define GPA_MAP_SIZE   (((unsigned long) 1 << 36) - GPA_STACK_SIZE) /* 63 gigabytes */
 #define LG_ALIGN(addr) ((addr + (1 << 30) - 1) & ~((1 << 30) - 1))
 
-enum {
-    GPA_ADDR_PROC  = 0x000000000,
-    GPA_ADDR_MAP   = 0x400000000,
-    GPA_ADDR_STACK = 0x800000000,
-    GPA_ADDR_INVAL = 0xC00000000,
-};
 #endif /* __ASSEMBLY__ */
 
 #define IOCTL_DUNE_ENTER 0x80b0e901
