@@ -43,21 +43,22 @@ static int dune_is_in_guest(void)
 
 static int dune_is_user_mode(void)
 {
-        return 0;
+	return 0;
 }
 
 static unsigned long dune_get_guest_ip(void)
 {
 	unsigned long long ip = 0;
+
 	if (__this_cpu_read(local_vcpu))
 		ip = vmcs_readl(GUEST_RIP);
 	return ip;
 }
 
 static struct perf_guest_info_callbacks dune_guest_cbs = {
-        .is_in_guest            = dune_is_in_guest,
-        .is_user_mode           = dune_is_user_mode,
-        .get_guest_ip           = dune_get_guest_ip,
+	.is_in_guest		= dune_is_in_guest,
+	.is_user_mode		= dune_is_user_mode,
+	.get_guest_ip		= dune_get_guest_ip,
 };
 
 static int dune_enter(struct dune_config *conf, int64_t *ret)
@@ -95,13 +96,15 @@ static long dune_dev_ioctl(struct file *filp,
 
 	case DUNE_GET_SYSCALL:
 		rdmsrl(MSR_LSTAR, r);
-		printk(KERN_INFO "R %lx\n", (unsigned long) r);
+		pr_info("R %lx\n", (unsigned long) r);
 		break;
 
 	case DUNE_GET_LAYOUT:
 		layout.phys_limit = (1UL << boot_cpu_data.x86_phys_bits);
-		layout.base_map = LG_ALIGN(current->mm->mmap_base) - GPA_MAP_SIZE;
-		layout.base_stack = LG_ALIGN(current->mm->start_stack) - GPA_STACK_SIZE;
+		layout.base_map = LG_ALIGN(current->mm->mmap_base) -
+					GPA_MAP_SIZE;
+		layout.base_stack = LG_ALIGN(current->mm->start_stack) -
+					GPA_STACK_SIZE;
 		r = copy_to_user((void __user *)arg, &layout,
 				 sizeof(struct dune_layout));
 		if (r) {
@@ -151,18 +154,20 @@ static struct miscdevice dune_dev = {
 static int __init dune_init(void)
 {
 	int r;
+
 	perf_register_guest_info_callbacks(&dune_guest_cbs);
 
-	printk(KERN_ERR "Dune module loaded\n");
+	pr_err("Dune module loaded\n");
 
-	if ((r = vmx_init())) {
-		printk(KERN_ERR "dune: failed to initialize vmx\n");
+	r = vmx_init();
+	if (r) {
+		pr_err("dune: failed to initialize vmx\n");
 		return r;
 	}
 
 	r = misc_register(&dune_dev);
 	if (r) {
-		printk(KERN_ERR "dune: misc device register failed\n");
+		pr_err("dune: misc device register failed\n");
 		vmx_exit();
 	}
 

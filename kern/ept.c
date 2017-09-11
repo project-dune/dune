@@ -8,7 +8,7 @@
  * process page table. Mappings are created lazily as they are needed.
  * We keep the EPT synchronized with the process page table through
  * mmu_notifier callbacks.
- * 
+ *
  * Some of the low-level EPT functions are based on KVM.
  * Original Authors:
  *   Avi Kivity   <avi@qumranet.com>
@@ -62,6 +62,7 @@ static inline bool cpu_has_vmx_ept_4levels(void)
 #define VMX_EPT_FAULT_WRITE	0x02
 #define VMX_EPT_FAULT_INS	0x04
 
+// TODO: Remove typedef later
 typedef unsigned long epte_t;
 
 #define __EPTE_READ	0x01
@@ -124,7 +125,7 @@ static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu,
 	uintptr_t gpa;
 
 	BUG_ON(!mm);
-	
+
 	mmap_start = LG_ALIGN(mm->mmap_base) - GPA_MAP_SIZE;
 	stack_start = LG_ALIGN(mm->start_stack) - GPA_STACK_SIZE;
 
@@ -135,7 +136,8 @@ static unsigned long hva_to_gpa(struct vmx_vcpu *vcpu,
 	} else if (hva >= mmap_start) {
 		if (hva - mmap_start >= GPA_MAP_SIZE)
 			return ADDR_INVAL;
-		gpa = hva - mmap_start + phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE;
+		gpa = hva - mmap_start + phys_end - GPA_STACK_SIZE
+			- GPA_MAP_SIZE;
 	} else {
 		if (hva >= phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE)
 			return ADDR_INVAL;
@@ -155,10 +157,10 @@ static unsigned long gpa_to_hva(struct vmx_vcpu *vcpu,
 		return gpa;
 	else if (gpa < phys_end - GPA_STACK_SIZE)
 		return gpa - (phys_end - GPA_STACK_SIZE - GPA_MAP_SIZE) +
-						LG_ALIGN(mm->mmap_base) - GPA_MAP_SIZE;
+			LG_ALIGN(mm->mmap_base) - GPA_MAP_SIZE;
 	else if (gpa < phys_end)
 		return gpa - (phys_end - GPA_STACK_SIZE) +
-						LG_ALIGN(mm->start_stack) - GPA_STACK_SIZE;
+			LG_ALIGN(mm->start_stack) - GPA_STACK_SIZE;
 	else
 		return ADDR_INVAL;
 }
@@ -212,8 +214,8 @@ ept_lookup(struct vmx_vcpu *vcpu, struct mm_struct *mm,
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) hva);
 
 	if (gpa == (void *) ADDR_INVAL) {
-		printk(KERN_ERR "ept: hva %p is out of range\n", hva);
-		printk(KERN_ERR "ept: mem_base %lx, stack_start %lx\n",
+		pr_err("ept: hva %p is out of range\n", hva);
+		pr_err("ept: mem_base %lx, stack_start %lx\n",
 		       mm->mmap_base, mm->start_stack);
 		return -EINVAL;
 	}
@@ -254,11 +256,13 @@ static void vmx_free_ept(unsigned long ept_root)
 
 	for (i = 0; i < PTRS_PER_PGD; i++) {
 		epte_t *pud = (epte_t *) epte_page_vaddr(pgd[i]);
+
 		if (!epte_present(pgd[i]))
 			continue;
 
 		for (j = 0; j < PTRS_PER_PUD; j++) {
 			epte_t *pmd = (epte_t *) epte_page_vaddr(pud[j]);
+
 			if (!epte_present(pud[j]))
 				continue;
 			if (epte_flags(pud[j]) & __EPTE_SZ) {
@@ -267,7 +271,9 @@ static void vmx_free_ept(unsigned long ept_root)
 			}
 
 			for (k = 0; k < PTRS_PER_PMD; k++) {
-				epte_t *pte = (epte_t *) epte_page_vaddr(pmd[k]);
+				epte_t *pte = (epte_t *)
+						epte_page_vaddr(pmd[k]);
+
 				if (!epte_present(pmd[k]))
 					continue;
 				if (epte_flags(pmd[k]) & __EPTE_SZ) {
@@ -336,6 +342,7 @@ static int ept_clear_l2_epte(epte_t *epte)
 
 	for (i = 0; i < PTRS_PER_PMD; i++) {
 		epte_t *pte = (epte_t *) epte_page_vaddr(pmd[i]);
+
 		if (!epte_present(pmd[i]))
 			continue;
 		if (epte_flags(pmd[i]) & __EPTE_SZ) {
@@ -402,7 +409,7 @@ static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 	ret = ept_lookup_gpa(vcpu, (void *) gpa, 0, 1, &epte);
 	if (ret) {
 		spin_unlock(&vcpu->ept_lock);
-		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
+		pr_err("ept: failed to lookup EPT entry\n");
 		return ret;
 	}
 
@@ -432,14 +439,15 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 	int ret;
 	epte_t *epte, flags;
 	struct page *page;
-	unsigned huge_shift;
+	unsigned int huge_shift;
 	int level;
 
 	ret = get_user_pages_fast(hva, 1, make_write, &page);
 	if (ret != 1) {
 		ret = ept_set_pfnmap_epte(vcpu, make_write, gpa, hva);
+
 		if (ret)
-			printk(KERN_ERR "ept: failed to get user page %lx\n", hva);
+			pr_err("ept: failed to get user page %lx\n", hva);
 		return ret;
 	}
 
@@ -447,6 +455,7 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 
 	huge_shift = compound_order(compound_head(page)) + PAGE_SHIFT;
 	level = 0;
+
 	if (huge_shift == 30)
 		level = 2;
 	else if (huge_shift == 21)
@@ -457,7 +466,7 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 	if (ret) {
 		spin_unlock(&vcpu->ept_lock);
 		put_page(page);
-		printk(KERN_ERR "ept: failed to lookup EPT entry\n");
+		pr_err("ept: failed to lookup EPT entry\n");
 		return ret;
 	}
 
@@ -483,7 +492,9 @@ static int ept_set_epte(struct vmx_vcpu *vcpu, int make_write,
 
 	if (level) {
 		struct page *tmp = page;
+
 		page = compound_head(page);
+
 		get_page(page);
 		put_page(tmp);
 
@@ -503,9 +514,9 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 	int ret;
 	unsigned long hva = gpa_to_hva(vcpu, current->mm, gpa);
 	int make_write = (fault_flags & VMX_EPT_FAULT_WRITE) ? 1 : 0;
-	
+
 	if (unlikely(hva == ADDR_INVAL)) {
-		printk(KERN_ERR "ept: gpa 0x%lx is out of range\n", gpa);
+		pr_err("ept: gpa 0x%lx is out of range\n", gpa);
 		return -EINVAL;
 	}
 
@@ -522,7 +533,7 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
  * @vcpu: the vcpu
  * @mm: the process's mm_struct
  * @addr: the address of the page
- * 
+ *
  * Returns 1 if the page was removed, 0 otherwise
  */
 static int ept_invalidate_page(struct vmx_vcpu *vcpu,
@@ -534,7 +545,7 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
 	if (gpa == (void *) ADDR_INVAL) {
-		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
+		pr_err("ept: hva %lx is out of range\n", addr);
 		return 0;
 	}
 
@@ -559,7 +570,7 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu,
  * @vcpu: the vcpu
  * @mm: the process's mm_struct
  * @addr: the address of the page
- * 
+ *
  * Returns 1 if the page is mapped, 0 otherwise
  */
 static int ept_check_page_mapped(struct vmx_vcpu *vcpu,
@@ -571,7 +582,7 @@ static int ept_check_page_mapped(struct vmx_vcpu *vcpu,
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
 	if (gpa == (void *) ADDR_INVAL) {
-		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
+		pr_err("ept: hva %lx is out of range\n", addr);
 		return 0;
 	}
 
@@ -588,7 +599,7 @@ static int ept_check_page_mapped(struct vmx_vcpu *vcpu,
  * @mm: the process's mm_struct
  * @addr: the address of the page
  * @flush: if true, clear the A bit
- * 
+ *
  * Returns 1 if the page was accessed, 0 otherwise
  */
 static int ept_check_page_accessed(struct vmx_vcpu *vcpu,
@@ -601,7 +612,7 @@ static int ept_check_page_accessed(struct vmx_vcpu *vcpu,
 	void *gpa = (void *) hva_to_gpa(vcpu, mm, (unsigned long) addr);
 
 	if (gpa == (void *) ADDR_INVAL) {
-		printk(KERN_ERR "ept: hva %lx is out of range\n", addr);
+		pr_err("ept: hva %lx is out of range\n", addr);
 		return 0;
 	}
 
@@ -682,7 +693,8 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 {
 	struct vmx_vcpu *vcpu = mmu_notifier_to_vmx(mn);
 
-	pr_debug("ept: change_pte addr %lx flags %lx\n", address, pte_flags(pte));
+	pr_debug("ept: change_pte addr %lx flags %lx\n", address,
+		pte_flags(pte));
 
 	/*
 	 * NOTE: Recent linux kernels (seen on 3.7 at least) hold a lock
@@ -693,7 +705,7 @@ static void ept_mmu_notifier_change_pte(struct mmu_notifier *mn,
 	ept_invalidate_page(vcpu, mm, address);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0)
+#if KERNEL_VERSION(3, 17, 0) <= LINUX_VERSION_CODE
 static int ept_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 					      struct mm_struct *mm,
 					      unsigned long start,
@@ -768,7 +780,7 @@ int vmx_init_ept(struct vmx_vcpu *vcpu)
 
 	memset(page, 0, PAGE_SIZE);
 	vcpu->ept_root =  __pa(page);
-	
+
 	return 0;
 }
 

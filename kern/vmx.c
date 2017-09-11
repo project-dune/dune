@@ -71,7 +71,7 @@ static unsigned long *msr_bitmap;
 
 #define NUM_SYSCALLS 312
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,11,0)
+#if  KERNEL_VERSION(3, 11, 0) >= LINUX_VERSION_CODE
 typedef void (*sys_call_ptr_t)(void);
 #else
 #include <asm/syscall.h>
@@ -201,13 +201,13 @@ static inline void __vmxoff(void)
 
 static inline void __invvpid(int ext, u16 vpid, gva_t gva)
 {
-    struct {
+	struct {
 	u64 vpid : 16;
 	u64 rsvd : 48;
 	u64 gva;
-    } operand = { vpid, 0, gva };
+	} operand = { vpid, 0, gva };
 
-    asm volatile (ASM_VMX_INVVPID
+	asm volatile (ASM_VMX_INVVPID
 		  /* CF==1 or ZF==1 --> rc = -1 */
 		  "; ja 1f ; ud2 ; 1:"
 		  : : "a"(&operand), "c"(ext) : "cc", "memory");
@@ -245,8 +245,7 @@ static void vmcs_clear(struct vmcs *vmcs)
 		      : "=qm"(error) : "a"(&phys_addr), "m"(phys_addr)
 		      : "cc", "memory");
 	if (error)
-		printk(KERN_ERR "kvm: vmclear fail: %p/%llx\n",
-		       vmcs, phys_addr);
+		pr_err("kvm: vmclear fail: %p/%llx\n", vmcs, phys_addr);
 }
 
 static void vmcs_load(struct vmcs *vmcs)
@@ -258,8 +257,7 @@ static void vmcs_load(struct vmcs *vmcs)
 			: "=qm"(error) : "a"(&phys_addr), "m"(phys_addr)
 			: "cc", "memory");
 	if (error)
-		printk(KERN_ERR "vmx: vmptrld %p/%llx failed\n",
-		       vmcs, phys_addr);
+		pr_err("vmx: vmptrld %p/%llx failed\n", vmcs, phys_addr);
 }
 
 static __always_inline u16 vmcs_read16(unsigned long field)
@@ -283,7 +281,7 @@ static __always_inline u64 vmcs_read64(unsigned long field)
 
 static noinline void vmwrite_error(unsigned long field, unsigned long value)
 {
-	printk(KERN_ERR "vmwrite error: reg %lx value %lx (err %d)\n",
+	pr_err("vmwrite error: reg %lx value %lx (err %d)\n",
 	       field, value, vmcs_read32(VM_INSTRUCTION_ERROR));
 	dump_stack();
 }
@@ -384,7 +382,7 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 #endif
 	if (_cpu_based_exec_control & CPU_BASED_ACTIVATE_SECONDARY_CONTROLS) {
 		min2 = 0;
-		opt2 =  SECONDARY_EXEC_WBINVD_EXITING |
+		opt2 =	SECONDARY_EXEC_WBINVD_EXITING |
 			SECONDARY_EXEC_ENABLE_VPID |
 			SECONDARY_EXEC_ENABLE_EPT |
 			SECONDARY_EXEC_RDTSCP |
@@ -401,7 +399,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 #endif
 	if (_cpu_based_2nd_exec_control & SECONDARY_EXEC_ENABLE_EPT) {
 		/* CR3 accesses and invlpg don't need to cause VM Exits when EPT
-		   enabled */
+		 * enabled
+		 */
 		_cpu_based_exec_control &= ~(CPU_BASED_CR3_LOAD_EXITING |
 					     CPU_BASED_CR3_STORE_EXITING |
 					     CPU_BASED_INVLPG_EXITING);
@@ -449,7 +448,7 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 	vmcs_conf->pin_based_exec_ctrl = _pin_based_exec_control;
 	vmcs_conf->cpu_based_exec_ctrl = _cpu_based_exec_control;
 	vmcs_conf->cpu_based_2nd_exec_ctrl = _cpu_based_2nd_exec_control;
-	vmcs_conf->vmexit_ctrl         = _vmexit_control;
+	vmcs_conf->vmexit_ctrl	       = _vmexit_control;
 	vmcs_conf->vmentry_ctrl        = _vmentry_control;
 
 	vmx_capability.has_load_efer =
@@ -537,8 +536,8 @@ static void vmx_setup_constant_host_state(void)
 		vmcs_write64(HOST_IA32_PAT, low32 | ((u64) high32 << 32));
 	}
 
-	vmcs_write16(HOST_FS_SELECTOR, 0);            /* 22.2.4 */
-	vmcs_write16(HOST_GS_SELECTOR, 0);            /* 22.2.4 */
+	vmcs_write16(HOST_FS_SELECTOR, 0);	      /* 22.2.4 */
+	vmcs_write16(HOST_GS_SELECTOR, 0);	      /* 22.2.4 */
 
 #ifdef CONFIG_X86_64
 	rdmsrl(MSR_FS_BASE, tmpl);
@@ -554,6 +553,7 @@ static void vmx_setup_constant_host_state(void)
 static inline u16 vmx_read_ldt(void)
 {
 	u16 ldt;
+
 	asm("sldt %0" : "=g"(ldt));
 	return ldt;
 }
@@ -570,7 +570,7 @@ static unsigned long segment_base(u16 selector)
 
 	table_base = gdt->address;
 
-	if (selector & 4) {           /* from ldt */
+	if (selector & 4) {	      /* from ldt */
 		u16 ldt_selector = vmx_read_ldt();
 
 		if (!(ldt_selector & ~3))
@@ -581,8 +581,8 @@ static unsigned long segment_base(u16 selector)
 	d = (struct desc_struct *)(table_base + (selector & ~7));
 	v = get_desc_base(d);
 #ifdef CONFIG_X86_64
-       if (d->s == 0 && (d->type == 2 || d->type == 9 || d->type == 11))
-               v |= ((unsigned long)((struct ldttss_desc64 *)d)->base3) << 32;
+	if (d->s == 0 && (d->type == 2 || d->type == 9 || d->type == 11))
+		v |= ((unsigned long)((struct ldttss_desc64 *)d)->base3) << 32;
 #endif
 	return v;
 }
@@ -590,6 +590,7 @@ static unsigned long segment_base(u16 selector)
 static inline unsigned long vmx_read_tr_base(void)
 {
 	u16 tr;
+
 	asm("str %0" : "=g"(tr));
 	return segment_base(tr);
 }
@@ -709,6 +710,7 @@ void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu)
 void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
 {
 	struct sync_addr_args args;
+
 	args.vcpu = vcpu;
 	args.gpa = gpa;
 
@@ -734,40 +736,39 @@ static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 	flags = vmcs_readl(GUEST_RFLAGS);
 	vmx_put_cpu(vcpu);
 
-	printk(KERN_INFO "vmx: --- Begin VCPU Dump ---\n");
-	printk(KERN_INFO "vmx: CPU %d VPID %d\n", vcpu->cpu, vcpu->vpid);
-	printk(KERN_INFO "vmx: RIP 0x%016llx RFLAGS 0x%08lx\n",
+	pr_info("vmx: --- Begin VCPU Dump ---\n");
+	pr_info("vmx: CPU %d VPID %d\n", vcpu->cpu, vcpu->vpid);
+	pr_info("vmx: RIP 0x%016llx RFLAGS 0x%08lx\n",
 	       vcpu->regs[VCPU_REGS_RIP], flags);
-	printk(KERN_INFO "vmx: RAX 0x%016llx RCX 0x%016llx\n",
+	pr_info("vmx: RAX 0x%016llx RCX 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_RAX], vcpu->regs[VCPU_REGS_RCX]);
-	printk(KERN_INFO "vmx: RDX 0x%016llx RBX 0x%016llx\n",
+	pr_info("vmx: RDX 0x%016llx RBX 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_RDX], vcpu->regs[VCPU_REGS_RBX]);
-	printk(KERN_INFO "vmx: RSP 0x%016llx RBP 0x%016llx\n",
+	pr_info("vmx: RSP 0x%016llx RBP 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_RSP], vcpu->regs[VCPU_REGS_RBP]);
-	printk(KERN_INFO "vmx: RSI 0x%016llx RDI 0x%016llx\n",
+	pr_info("vmx: RSI 0x%016llx RDI 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_RSI], vcpu->regs[VCPU_REGS_RDI]);
-	printk(KERN_INFO "vmx: R8  0x%016llx R9  0x%016llx\n",
+	pr_info("vmx: R8  0x%016llx R9  0x%016llx\n",
 			vcpu->regs[VCPU_REGS_R8], vcpu->regs[VCPU_REGS_R9]);
-	printk(KERN_INFO "vmx: R10 0x%016llx R11 0x%016llx\n",
+	pr_info("vmx: R10 0x%016llx R11 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_R10], vcpu->regs[VCPU_REGS_R11]);
-	printk(KERN_INFO "vmx: R12 0x%016llx R13 0x%016llx\n",
+	pr_info("vmx: R12 0x%016llx R13 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_R12], vcpu->regs[VCPU_REGS_R13]);
-	printk(KERN_INFO "vmx: R14 0x%016llx R15 0x%016llx\n",
+	pr_info("vmx: R14 0x%016llx R15 0x%016llx\n",
 			vcpu->regs[VCPU_REGS_R14], vcpu->regs[VCPU_REGS_R15]);
-	printk(KERN_INFO "vmx: FS.base 0x%016lx GS.base 0x%016lx\n",
+	pr_info("vmx: FS.base 0x%016lx GS.base 0x%016lx\n",
 			vmcs_readl(GUEST_FS_BASE), vmcs_readl(GUEST_GS_BASE));
 
-	printk(KERN_INFO "vmx: Dumping Stack Contents...\n");
+	pr_info("vmx: Dumping Stack Contents...\n");
 	sp = (unsigned long *) vcpu->regs[VCPU_REGS_RSP];
 	for (i = 0; i < STACK_DEPTH; i++)
 		if (get_user(val, &sp[i]))
-			printk(KERN_INFO "vmx: RSP%+-3ld ?\n",
-				i * sizeof(long));
+			pr_info("vmx: RSP%+-3ld ?\n", i * sizeof(long));
 		else
-			printk(KERN_INFO "vmx: RSP%+-3ld 0x%016lx\n",
+			pr_info("vmx: RSP%+-3ld 0x%016lx\n",
 				i * sizeof(long), val);
 
-	printk(KERN_INFO "vmx: --- End VCPU Dump ---\n");
+	pr_info("vmx: --- End VCPU Dump ---\n");
 }
 
 static u64 construct_eptp(unsigned long root_hpa)
@@ -785,7 +786,8 @@ static u64 construct_eptp(unsigned long root_hpa)
 }
 
 /**
- * vmx_setup_initial_guest_state - configures the initial state of guest registers
+ * vmx_setup_initial_guest_state - configures the initial state of guest
+ * registers
  */
 static void vmx_setup_initial_guest_state(struct dune_config *conf)
 {
@@ -950,13 +952,14 @@ static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
 
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, 0);
-	vmcs_write32(CR3_TARGET_COUNT, 0);           /* 22.2.1 */
+	vmcs_write32(CR3_TARGET_COUNT, 0);	     /* 22.2.1 */
 
 	setup_msr(vcpu);
 #if 0
 	if (vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_IA32_PAT) {
 		u32 msr_low, msr_high;
 		u64 host_pat;
+
 		rdmsr(MSR_IA32_CR_PAT, msr_low, msr_high);
 		host_pat = msr_low | ((u64) msr_high << 32);
 		/* Write the default value follow host pat */
@@ -1059,7 +1062,8 @@ static void vmx_setup_registers(struct vmx_vcpu *vcpu, struct dune_config *conf)
 /**
  * vmx_copy_registers_to_conf - copy registers to dune_config
  */
-static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config *conf)
+static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu,
+					struct dune_config *conf)
 {
 	conf->rax = vcpu->regs[VCPU_REGS_RAX];
 	conf->rbx = vcpu->regs[VCPU_REGS_RBX];
@@ -1086,7 +1090,7 @@ static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config
  *
  * Returns: A new VCPU structure
  */
-static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
+static struct vmx_vcpu *vmx_create_vcpu(struct dune_config *conf)
 {
 	struct vmx_vcpu *vcpu;
 
@@ -1133,7 +1137,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 
 	if (cpu_has_vmx_ept_ad_bits()) {
 		vcpu->ept_ad_enabled = true;
-		printk(KERN_INFO "vmx: enabled EPT A/D bits");
+		pr_info("vmx: enabled EPT A/D bits");
 	}
 	if (vmx_create_ept(vcpu))
 		goto fail_ept;
@@ -1171,8 +1175,7 @@ void vmx_cleanup(void)
 	struct vmx_vcpu *vcpu, *tmp;
 
 	list_for_each_entry_safe(vcpu, tmp, &vcpus, list) {
-		printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n",
-		       vcpu->vpid);
+		pr_err("vmx: destroying VCPU (VPID %d)\n", vcpu->vpid);
 		list_del(&vcpu->list);
 		vmx_destroy_vcpu(vcpu);
 	}
@@ -1246,7 +1249,7 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	 * in a child process since it is not running in Dune.
 	 * Our solution is to adopt a special Dune convention
 	 * where the desired %RIP address is provided in %RCX.
-	 */ 
+	 */
 	if (!(__addr_ok(regs->ip)))
 		regs->ip = regs->cx;
 
@@ -1254,7 +1257,7 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	regs->ss = __USER_DS;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE
 static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
 		void __user *parent_tid, void __user *child_tid,
 		unsigned long tls)
@@ -1293,7 +1296,7 @@ static long dune_sys_fork(void)
 {
 	struct vmx_vcpu *vcpu;
 	struct pt_regs regs;
-	
+
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
 	make_pt_regs(vcpu, &regs, __NR_fork);
@@ -1305,7 +1308,7 @@ static long dune_sys_vfork(void)
 {
 	struct vmx_vcpu *vcpu;
 	struct pt_regs regs;
-	
+
 	asm("movq %%r11, %0" : "=r"(vcpu));
 
 	make_pt_regs(vcpu, &regs, __NR_vfork);
@@ -1318,7 +1321,7 @@ static void vmx_init_syscall(void)
 {
 	memcpy(dune_syscall_tbl, (void *) SYSCALL_TBL,
 	       sizeof(sys_call_ptr_t) * NUM_SYSCALLS);
-	
+
 	dune_syscall_tbl[__NR_exit] = (void *) &dune_exit;
 	dune_syscall_tbl[__NR_exit_group] = (void *) &dune_exit_group;
 	dune_syscall_tbl[__NR_clone] = (void *) &dune_sys_clone;
@@ -1340,8 +1343,7 @@ static void vmx_init_syscall(void)
  */
 static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 {
-	asm(
-		/* Store host registers */
+	asm(/* Store host registers */
 		"push %%"R"dx; push %%"R"bp;"
 		"push %%"R"cx \n\t" /* placeholder for guest rcx */
 		"push %%"R"cx \n\t"
@@ -1367,8 +1369,8 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 		"mov %c[rdi](%0), %%"R"di \n\t"
 		"mov %c[rbp](%0), %%"R"bp \n\t"
 #ifdef CONFIG_X86_64
-		"mov %c[r8](%0),  %%r8  \n\t"
-		"mov %c[r9](%0),  %%r9  \n\t"
+		"mov %c[r8](%0),  %%r8	\n\t"
+		"mov %c[r9](%0),  %%r9	\n\t"
 		"mov %c[r10](%0), %%r10 \n\t"
 		"mov %c[r11](%0), %%r11 \n\t"
 		"mov %c[r12](%0), %%r12 \n\t"
@@ -1449,7 +1451,7 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 	vcpu->launched = 1;
 
 	if (unlikely(vcpu->fail)) {
-		printk(KERN_ERR "vmx: failure detected (err %x)\n",
+		pr_err("vmx: failure detected (err %x)\n",
 		       vmcs_read32(VM_INSTRUCTION_ERROR));
 		return VMX_EXIT_REASONS_FAILED_VMENTRY;
 	}
@@ -1480,22 +1482,21 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 	gva = vmcs_readl(GUEST_LINEAR_ADDRESS);
 	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
 	vmx_put_cpu(vcpu);
-	
+
 	if (exit_qual & (1 << 6)) {
-		printk(KERN_ERR "EPT: GPA 0x%lx exceeds GAW!\n", gpa);
+		pr_err("EPT: GPA 0x%lx exceeds GAW!\n", gpa);
 		return -EINVAL;
 	}
-	
+
 	if (!(exit_qual & (1 << 7))) {
-		printk(KERN_ERR "EPT: linear address is not valid, GPA: 0x%lx!\n", gpa);
+		pr_err("EPT: linear address is not valid, GPA: 0x%lx!\n", gpa);
 		return -EINVAL;
 	}
 
 	ret = vmx_do_ept_fault(vcpu, gpa, gva, exit_qual);
 
 	if (ret) {
-		printk(KERN_ERR "vmx: page fault failure "
-		       "GPA: 0x%lx, GVA: 0x%lx\n",
+		pr_err("vmx: page fault failure GPA: 0x%lx, GVA: 0x%lx\n",
 		       gpa, gva);
 		vcpu->ret_code = DUNE_RET_EPT_VIOLATION;
 		vmx_dump_cpu(vcpu);
@@ -1512,10 +1513,10 @@ static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
 		return;
 	}
-	
+
 	if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
 		     vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
-		printk(KERN_INFO "vmx: got unsupported syscall\n");
+		pr_info("vmx: got unsupported syscall\n");
 		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
 		return;
 	}
@@ -1527,8 +1528,8 @@ static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 		"mov %c[rdi](%0), %%"R"di \n\t"
 		"mov %c[rsi](%0), %%"R"si \n\t"
 		"mov %c[rdx](%0), %%"R"dx \n\t"
-		"mov %c[r8](%0),  %%r8  \n\t"
-		"mov %c[r9](%0),  %%r9  \n\t"
+		"mov %c[r8](%0),  %%r8	\n\t"
+		"mov %c[r9](%0),  %%r9	\n\t"
 		"mov %c[syscall](%0), %%r10 \n\t"
 		"mov %0, %%r11 \n\t"
 		"push %0 \n\t"
@@ -1552,7 +1553,8 @@ static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 	);
 
 	/* We apply the restart semantics as if no signal handler will be
-	 * executed. */
+	 * executed.
+	 */
 	switch (vcpu->regs[VCPU_REGS_RAX]) {
 	case -ERESTARTNOHAND:
 	case -ERESTARTSYS:
@@ -1595,7 +1597,7 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 	if ((intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR)
 		return 0;
 
-	printk(KERN_ERR "vmx: got interrupt, intr_info %x\n", intr_info);
+	pr_err("vmx: got interrupt, intr_info %x\n", intr_info);
 	vcpu->ret_code = DUNE_RET_INTERRUPT;
 	vcpu->conf->status = intr_info & INTR_INFO_VECTOR_MASK;
 	return -EIO;
@@ -1609,12 +1611,12 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 {
 	int ret, done = 0;
 	u32 exit_intr_info;
+
 	struct vmx_vcpu *vcpu = vmx_create_vcpu(conf);
 	if (!vcpu)
 		return -ENOMEM;
 
-	printk(KERN_ERR "vmx: created VCPU (VPID %d)\n",
-	       vcpu->vpid);
+	pr_err("vmx: created VCPU (VPID %d)\n", vcpu->vpid);
 
 	while (1) {
 		vmx_get_cpu(vcpu);
@@ -1651,9 +1653,10 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 
 		ret = vmx_run_vcpu(vcpu);
 
-		/* We need to handle NMIs before interrupts are enabled */
+		// We need to handle NMIs before interrupts are enabled
 		exit_intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
-		if ((exit_intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR &&
+		if ((exit_intr_info &
+			INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR &&
 		    (exit_intr_info & INTR_INFO_VALID_MASK)) {
 			asm("int $2");
 		}
@@ -1677,7 +1680,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			if (vmx_handle_nmi_exception(vcpu))
 				done = 1;
 		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT) {
-			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
+			pr_info("unhandled exit: reason %d, exit qualification %x\n",
 			       ret, vmcs_read32(EXIT_QUALIFICATION));
 			vcpu->ret_code = DUNE_RET_UNHANDLED_VMEXIT;
 			vmx_dump_cpu(vcpu);
@@ -1688,8 +1691,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			break;
 	}
 
-	printk(KERN_ERR "vmx: stopping VCPU (VPID %d)\n",
-	       vcpu->vpid);
+	pr_err("vmx: stopping VCPU (VPID %d)\n", vcpu->vpid);
 
 	*ret_code = vcpu->ret_code;
 
@@ -1741,19 +1743,19 @@ static __init void vmx_enable(void *unused)
 	int ret;
 	struct vmcs *vmxon_buf = __this_cpu_read(vmxarea);
 
-	if ((ret = __vmx_enable(vmxon_buf)))
+	ret = __vmx_enable(vmxon_buf);
+	if (ret)
 		goto failed;
 
 	this_cpu_write(vmx_enabled, 1);
 	native_store_gdt(this_cpu_ptr(&host_gdt));
 
-	printk(KERN_INFO "vmx: VMX enabled on CPU %d\n",
-	       raw_smp_processor_id());
+	pr_info("vmx: VMX enabled on CPU %d\n", raw_smp_processor_id());
 	return;
 
 failed:
 	atomic_inc(&vmx_enable_failed);
-	printk(KERN_ERR "vmx: failed to enable VMX, err = %d\n", ret);
+	pr_err("vmx: failed to enable VMX, err = %d\n", ret);
 }
 
 /**
@@ -1789,9 +1791,9 @@ static void vmx_free_vmxon_areas(void)
 __init int vmx_init(void)
 {
 	int r, cpu;
-	
+
 	if (!cpu_has_vmx()) {
-		printk(KERN_ERR "vmx: CPU does not support VT-x\n");
+		pr_err("vmx: CPU does not support VT-x\n");
 		return -EIO;
 	}
 
@@ -1801,24 +1803,24 @@ __init int vmx_init(void)
 		return -EIO;
 
 	if (!cpu_has_vmx_vpid()) {
-		printk(KERN_ERR "vmx: CPU is missing required feature 'VPID'\n");
+		pr_err("vmx: CPU is missing required feature 'VPID'\n");
 		return -EIO;
 	}
 
 	if (!cpu_has_vmx_ept()) {
-		printk(KERN_ERR "vmx: CPU is missing required feature 'EPT'\n");
+		pr_err("vmx: CPU is missing required feature 'EPT'\n");
 		return -EIO;
 	}
 
 	if (!vmx_capability.has_load_efer) {
-		printk(KERN_ERR "vmx: ability to load EFER register is required\n");
+		pr_err("vmx: ability to load EFER register is required\n");
 		return -EIO;
 	}
 
 	msr_bitmap = (unsigned long *)__get_free_page(GFP_KERNEL);
-	if (!msr_bitmap) {
+	if (!msr_bitmap)
 		return -ENOMEM;
-	}
+
 	/* FIXME: do we need APIC virtualization (flexpriority?) */
 
 	memset(msr_bitmap, 0xff, PAGE_SIZE);
@@ -1843,7 +1845,7 @@ __init int vmx_init(void)
 
 	atomic_set(&vmx_enable_failed, 0);
 	if (on_each_cpu(vmx_enable, NULL, 1)) {
-		printk(KERN_ERR "vmx: timeout waiting for VMX mode enable.\n");
+		pr_err("vmx: timeout waiting for VMX mode enable.\n");
 		r = -EIO;
 		goto failed1; /* sadly we can't totally recover */
 	}

@@ -13,7 +13,8 @@ static struct {
 
 static void notifier_sched_in(struct preempt_notifier *notifier, int cpu)
 {
-	if (!trap_state.triggered && KSTK_EIP(current) == trap_conf.trigger_rip) {
+	if (!trap_state.triggered &&
+	    KSTK_EIP(current) == trap_conf.trigger_rip) {
 		trap_state.triggered = 1;
 		trap_state.count = trap_conf.delay;
 	}
@@ -46,7 +47,8 @@ static void notifier_sched_in(struct preempt_notifier *notifier, int cpu)
 		/* Debuggers use the single step flags to get notification when
 		 * a breakpointed instruction is executed, so that they can
 		 * restore the int3 opcode. Unset the flags so that they don't
-		 * get the notification in our notify_func. */
+		 * get the notification in our notify_func.
+		 */
 		regs->flags &= ~X86_EFLAGS_TF;
 		clear_thread_flag(TIF_SINGLESTEP);
 
@@ -56,13 +58,16 @@ static void notifier_sched_in(struct preempt_notifier *notifier, int cpu)
 			regs->ip = (__u64) trap_conf.notify_func;
 			regs->di = (__u64) trap_conf.regs;
 			regs->si = (__u64) trap_conf.priv;
-			/* Go past the red zone mandated by the System V x86-64 ABI. */
+			/* Go past the red zone mandated by the System V
+			 * x86-64 ABI.
+			 */
 			regs->sp -= 128;
 		}
 	}
 }
 
-static void notifier_sched_out(struct preempt_notifier *notifier, struct task_struct *next)
+static void notifier_sched_out(struct preempt_notifier *notifier,
+				struct task_struct *next)
 {
 }
 
