@@ -16,12 +16,12 @@
 #endif
 
 #if !defined(VMX_EPT_AD_BIT)
-#define VMX_EPT_AD_BIT		(1ull << 21)
-#define VMX_EPT_AD_ENABLE_BIT	(1ull << 6)
+#define VMX_EPT_AD_BIT		BIT_ULL(21)
+#define VMX_EPT_AD_ENABLE_BIT	BIT_ULL(6)
 #endif
 
 #ifndef VMX_EPT_EXTENT_INDIVIDUAL_BIT
-#define VMX_EPT_EXTENT_INDIVIDUAL_BIT		(1ull << 24)
+#define VMX_EPT_EXTENT_INDIVIDUAL_BIT		BIT_ULL(24)
 #endif
 
 #ifndef X86_CR4_PCIDE
@@ -47,7 +47,6 @@ static inline struct page *alloc_pages_exact_node(int nid, gfp_t gfp_mask,
 }
 #endif
 
-
 #if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE & defined(_DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long, unsigned long,
 				int __user *, int __user *, unsigned long);
@@ -70,12 +69,11 @@ dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
 
 	memcpy(me, &tmp, sizeof(struct pt_regs));
 	return ret;
-
 }
 #elif KERNEL_VERSION(3, 5, 0) <= LINUX_VERSION_CODE & defined(DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long, unsigned long,
 			      int __user *, int __user *);
-static do_fork_hack __dune_do_fork = (do_fork_hack) DO_FORK;
+static do_fork_hack __dune_do_fork = (do_fork_hack)DO_FORK;
 static inline long
 dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
 	     struct pt_regs *regs, unsigned long stack_size,
@@ -94,13 +92,12 @@ dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
 
 	memcpy(me, &tmp, sizeof(struct pt_regs));
 	return ret;
-
 }
 #elif defined(DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long,
 			      struct pt_regs *, unsigned long,
 			      int __user *, int __user *);
-static do_fork_hack dune_do_fork = (do_fork_hack) DO_FORK;
+static do_fork_hack dune_do_fork = (do_fork_hack)DO_FORK;
 #endif
 
 #if KERNEL_VERSION(3, 19, 0) > LINUX_VERSION_CODE
@@ -108,10 +105,12 @@ static inline unsigned long __read_cr4(void)
 {
 	return read_cr4();
 }
+
 static inline void cr4_set_bits(unsigned long mask)
 {
 	write_cr4(read_cr4() | mask);
 }
+
 static inline void cr4_clear_bits(unsigned long mask)
 {
 	write_cr4(read_cr4() & ~mask);

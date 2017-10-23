@@ -67,7 +67,7 @@ static int dune_enter(struct dune_config *conf, int64_t *ret)
 }
 
 static long dune_dev_ioctl(struct file *filp,
-			  unsigned int ioctl, unsigned long arg)
+			   unsigned int ioctl, unsigned long arg)
 {
 	long r = -EINVAL;
 	struct dune_config conf;
@@ -75,7 +75,7 @@ static long dune_dev_ioctl(struct file *filp,
 
 	switch (ioctl) {
 	case DUNE_ENTER:
-		r = copy_from_user(&conf, (int __user *) arg,
+		r = copy_from_user(&conf, (int __user *)arg,
 				   sizeof(struct dune_config));
 		if (r) {
 			r = -EIO;
@@ -96,7 +96,7 @@ static long dune_dev_ioctl(struct file *filp,
 
 	case DUNE_GET_SYSCALL:
 		rdmsrl(MSR_LSTAR, r);
-		pr_info("R %lx\n", (unsigned long) r);
+		pr_info("R %lx\n", (unsigned long)r);
 		break;
 
 	case DUNE_GET_LAYOUT:

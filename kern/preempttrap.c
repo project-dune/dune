@@ -55,9 +55,9 @@ static void notifier_sched_in(struct preempt_notifier *notifier, int cpu)
 		if (sizeof(struct dune_trap_regs) == trap_conf.regs_size) {
 			copy_to_user((void __user *)trap_conf.regs,
 				     &trap_regs, sizeof(struct dune_trap_regs));
-			regs->ip = (__u64) trap_conf.notify_func;
-			regs->di = (__u64) trap_conf.regs;
-			regs->si = (__u64) trap_conf.priv;
+			regs->ip = (__u64)trap_conf.notify_func;
+			regs->di = (__u64)trap_conf.regs;
+			regs->si = (__u64)trap_conf.priv;
 			/* Go past the red zone mandated by the System V
 			 * x86-64 ABI.
 			 */
@@ -67,7 +67,7 @@ static void notifier_sched_in(struct preempt_notifier *notifier, int cpu)
 }
 
 static void notifier_sched_out(struct preempt_notifier *notifier,
-				struct task_struct *next)
+			       struct task_struct *next)
 {
 }
 
@@ -85,7 +85,7 @@ long dune_trap_enable(unsigned long arg)
 	unsigned long r;
 
 	r = copy_from_user(&trap_conf, (void __user *)arg,
-			 sizeof(struct dune_trap_config));
+			   sizeof(struct dune_trap_config));
 	if (r) {
 		r = -EIO;
 		goto out;
