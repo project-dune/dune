@@ -1,28 +1,34 @@
-CC	= gcc
-CFLAGS	= -Wall -g -MD -O2 -I ../
+CC	:= gcc
+CFLAGS	:= -Wall -g -MD -O2 -I ../
+LDFLAGS := -ldune -lpthread
+MODULE_LIB := /lib/modules/$(shell uname -r)/build
 
-all: hello test timetest test_sandbox hugepages hugepages_mod.ko
+tests_files := hello test timetest test_sandbox hugepages hugepages_mod.ko
+
+obj-m += hugepages_mod.o
+
+all: $(tests_files)
 
 hello: hello.o ../libdune/libdune.a
-	$(CC) $(CFLAGS) $(<) -o hello -L ../libdune -ldune -lpthread
+	$(CC) $(CFLAGS) -static $(<) -L../libdune/ $(LDFLAGS) -o $(@)
 
 timetest: timetest.o ../libdune/libdune.a
-	$(CC) $(CFLAGS) $(<) -o $(@) -L ../libdune -ldune -lpthread
+	$(CC) $(CFLAGS) -static $(<) -L../libdune $(LDFLAGS) -o $(@)
 
 test: test.o ../libdune/libdune.a
-	$(CC) $(CFLAGS) $(<) -o test -L ../libdune -ldune -lpthread
+	$(CC) $(CFLAGS) -static $(<) -L../libdune $(LDFLAGS) -o $(@)
 
 test_sandbox: test_sandbox.o
-	$(CC) $(CFLAGS) -o $(@) $(<) -lpthread
+	$(CC) $(CFLAGS) -static $(<) -pthread -o $(@)
 
 hugepages: hugepages.o ../libdune/libdune.a
-	$(CC) $(CFLAGS) $(<) -o hugepages -L ../libdune -ldune
+	$(CC) $(CFLAGS) -static $(<) -L../libdune $(LDFLAGS) -o $(@)
 
 hugepages_mod.ko: hugepages_mod.c
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) obj-m=hugepages_mod.o CFLAGS= modules
+	make -C $(MODULE_LIB) M=$(PWD) CFLAGS= LDFLAGS= modules
 
 clean:
-	rm -f *.o test *.d hello test timetest test_sandbox hugepages
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) obj-m=hugepages_mod.o clean
+	rm -f *.o test *.d $(tests_files)
+	make -C $(MODULE_LIB) M=$(PWD) clean
 
 -include *.d
