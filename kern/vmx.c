@@ -510,7 +510,7 @@ static void vmx_setup_constant_host_state(void)
 
 	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS);  /* 22.2.3 */
 	vmcs_writel(HOST_CR4, __read_cr4());  /* 22.2.3, 22.2.5 */
-	vmcs_writel(HOST_CR3, read_cr3());  /* 22.2.3 */
+	vmcs_writel(HOST_CR3, __read_cr3());  /* 22.2.3 */
 
 	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);  /* 22.2.4 */
 	vmcs_write16(HOST_DS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
