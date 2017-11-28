@@ -3,25 +3,25 @@
 
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+#if KERNEL_VERSION(3, 1, 0) <= LINUX_VERSION_CODE
 #include <asm/fpu/api.h>
 #else
 #include <asm/i387.h>
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE
 #include <asm/fpu/internal.h>
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+#elif KERNEL_VERSION(3, 4, 0) <= LINUX_VERSION_CODE
 #include <asm/fpu-internal.h>
 #endif
 
 #if !defined(VMX_EPT_AD_BIT)
-#define VMX_EPT_AD_BIT          (1ull << 21)
-#define VMX_EPT_AD_ENABLE_BIT   (1ull << 6)
+#define VMX_EPT_AD_BIT		BIT_ULL(21)
+#define VMX_EPT_AD_ENABLE_BIT	BIT_ULL(6)
 #endif
 
 #ifndef VMX_EPT_EXTENT_INDIVIDUAL_BIT
-#define VMX_EPT_EXTENT_INDIVIDUAL_BIT           (1ull << 24)
+#define VMX_EPT_EXTENT_INDIVIDUAL_BIT		BIT_ULL(24)
 #endif
 
 #ifndef X86_CR4_PCIDE
@@ -40,17 +40,16 @@
 #define AR_TYPE_BUSY_64_TSS VMX_AR_TYPE_BUSY_64_TSS
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+#if KERNEL_VERSION(4, 3, 0) <= LINUX_VERSION_CODE
 static inline struct page *alloc_pages_exact_node(int nid, gfp_t gfp_mask,
-                                                    unsigned int order){
+						  unsigned int order) {
 	return alloc_pages_node(nid, gfp_mask, order);
 }
 #endif
 
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) & defined(_DO_FORK)
+#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE & defined(_DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long, unsigned long,
-                              int __user *, int __user *, unsigned long);
+				int __user *, int __user *, unsigned long);
 static do_fork_hack __dune_do_fork = (do_fork_hack) _DO_FORK;
 static inline long
 dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
@@ -70,12 +69,11 @@ dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
 
 	memcpy(me, &tmp, sizeof(struct pt_regs));
 	return ret;
-
 }
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0) & defined(DO_FORK)
+#elif KERNEL_VERSION(3, 5, 0) <= LINUX_VERSION_CODE & defined(DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long, unsigned long,
-                              int __user *, int __user *);
-static do_fork_hack __dune_do_fork = (do_fork_hack) DO_FORK;
+			      int __user *, int __user *);
+static do_fork_hack __dune_do_fork = (do_fork_hack)DO_FORK;
 static inline long
 dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
 	     struct pt_regs *regs, unsigned long stack_size,
@@ -94,31 +92,32 @@ dune_do_fork(unsigned long clone_flags, unsigned long stack_start,
 
 	memcpy(me, &tmp, sizeof(struct pt_regs));
 	return ret;
-
 }
 #elif defined(DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long,
-                              struct pt_regs *, unsigned long,
-                              int __user *, int __user *);
-static do_fork_hack dune_do_fork = (do_fork_hack) DO_FORK;
+			      struct pt_regs *, unsigned long,
+			      int __user *, int __user *);
+static do_fork_hack dune_do_fork = (do_fork_hack)DO_FORK;
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
+#if KERNEL_VERSION(3, 19, 0) > LINUX_VERSION_CODE
 static inline unsigned long __read_cr4(void)
 {
 	return read_cr4();
 }
+
 static inline void cr4_set_bits(unsigned long mask)
 {
 	write_cr4(read_cr4() | mask);
 }
+
 static inline void cr4_clear_bits(unsigned long mask)
 {
 	write_cr4(read_cr4() & ~mask);
 }
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+#if KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE
 static inline void compat_fpu_restore(void)
 {
 	if (!current->thread.fpu.fpregs_active)
@@ -132,7 +131,7 @@ static inline void compat_fpu_restore(void)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,18,0)
+#if KERNEL_VERSION(3, 18, 0) > LINUX_VERSION_CODE
 #define _PAGE_CACHE_MODE_WB _PAGE_CACHE_WB
 #define _PAGE_CACHE_MODE_WC _PAGE_CACHE_WC
 static inline long pgprot2cachemode(pgprot_t pgprot)

@@ -70,7 +70,7 @@ struct vmx_vcpu {
 	int ret_code;
 
 	struct msr_autoload {
-		unsigned nr;
+		unsigned int nr;
 		struct vmx_msr_entry guest[NR_AUTOLOAD_MSRS];
 		struct vmx_msr_entry host[NR_AUTOLOAD_MSRS];
 	} msr_autoload;
@@ -81,28 +81,27 @@ struct vmx_vcpu {
 	unsigned long guest_kernel_gs_base;
 };
 
-extern __init int vmx_init(void);
-extern void vmx_exit(void);
-extern void vmx_cleanup(void);
+__init int vmx_init(void);
+void vmx_exit(void);
+void vmx_cleanup(void);
 
-extern int vmx_launch(struct dune_config *conf, int64_t *ret_code);
+int vmx_launch(struct dune_config *conf, int64_t *ret_code);
 
-extern int vmx_init_ept(struct vmx_vcpu *vcpu);
-extern int vmx_create_ept(struct vmx_vcpu *vcpu);
-extern void vmx_destroy_ept(struct vmx_vcpu *vcpu);
+int vmx_init_ept(struct vmx_vcpu *vcpu);
+int vmx_create_ept(struct vmx_vcpu *vcpu);
+void vmx_destroy_ept(struct vmx_vcpu *vcpu);
 
-extern int
-vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
-		 unsigned long gva, int fault_flags);
+int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
+		     unsigned long gva, int fault_flags);
 
-extern void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu);
-extern void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa);
+void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu);
+void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa);
 
 static __always_inline unsigned long vmcs_readl(unsigned long field)
 {
-        unsigned long value;
+	unsigned long value;
 
-        asm volatile (ASM_VMX_VMREAD_RDX_RAX
-                      : "=a"(value) : "d"(field) : "cc");
-        return value;
+	asm volatile (ASM_VMX_VMREAD_RDX_RAX
+		      : "=a"(value) : "d"(field) : "cc");
+	return value;
 }
