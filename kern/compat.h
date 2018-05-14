@@ -108,6 +108,8 @@ static inline unsigned long __read_cr4(void)
 {
 	return read_cr4();
 }
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,13,0)
 static inline void cr4_set_bits(unsigned long mask)
 {
 	write_cr4(read_cr4() | mask);
