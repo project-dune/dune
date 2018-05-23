@@ -61,7 +61,7 @@ static inline unsigned int __prepare_ICR(unsigned int shortcut, int vector,
         case NMI_VECTOR:
                 icr |= APIC_DM_NMI;
                 break;
-        }   
+        }
         return icr;
 }
 

@@ -31,7 +31,7 @@ void *t2_start(void *arg) {
 		printf("posted_ipi: failed to enter dune in thread 2\n");
 		return NULL;
 	}
-        
+
 	dune_register_intr_handler(TEST_VECTOR, test_handler);
 	asm volatile("mfence" ::: "memory");
 	t2_ready = true;

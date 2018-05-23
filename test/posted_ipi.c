@@ -23,7 +23,7 @@ void *t_start(void *arg) {
 		printf("posted_ipi: failed to enter dune in thread %d\n", sched_getcpu());
 		return NULL;
 	}
-        
+
 	dune_register_intr_handler(TEST_VECTOR, test_handler);
 	asm volatile("mfence" ::: "memory");
 	*(volatile bool *)arg = true;
@@ -59,14 +59,14 @@ int main(int argc, char *argv[])
 	volatile bool ready[NUM_THREADS];
 	int i;
 	for (i = 0; i < NUM_THREADS; i++) {
-                ready[i] = false;
+            ready[i] = false;
 
-        	pthread_attr_t attr;
-        	pthread_attr_init(&attr);
-        	CPU_ZERO(&cpus);
-        	CPU_SET(i, &cpus);
-        	pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-        	pthread_create(&pthreads[i], &attr, t_start, (void *)&ready[i]);
+            pthread_attr_t attr;
+            pthread_attr_init(&attr);
+            CPU_ZERO(&cpus);
+            CPU_SET(i, &cpus);
+            pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+            pthread_create(&pthreads[i], &attr, t_start, (void *)&ready[i]);
 	}
 
 	for (i = 0; i < NUM_THREADS; i++) {
