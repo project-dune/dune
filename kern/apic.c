@@ -86,7 +86,7 @@ void apic_send_ipi(u8 vector, u32 destination_apic_id) {
 
 /* apic_write_eoi
  * Acknowledges receipt of an interrupt to the local APIC by writing an acknowledgment to
- * the local APIC's EOI register. Determines whether the computer is equipped with xAPICs 
+ * the local APIC's EOI register. Determines whether the computer is equipped with xAPICs
  * or x2APICs and writes the acknowledgment accordingly.
  *
  * [vector] is the vector of the interrupt to send.

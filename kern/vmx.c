@@ -1034,20 +1034,20 @@ static void send_posted_ipi(u32 apic_id, u8 vector) {
 	return;
     }
     desc = posted_interrupt_descriptors[cpu_id];
- 
+
     //first set the posted-interrupt request
     if (test_and_set_bit(vector, (unsigned long *)desc->vectors)) {
         //bit already set, so the interrupt is already pending (and
         //the outstanding notification bit is 1)
         return;
     }
-    
+
     //set the outstanding notification bit to 1
     if (test_and_set_bit(0, (unsigned long *)desc->extra)) {
         //bit already set, so there is an interrupt(s) already pending
         return;
     }
-    
+
     //now send the posted interrupt vector to the destination
     apic_send_ipi(POSTED_INTR_VECTOR, apic_id);
 }
@@ -1736,7 +1736,7 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 static void vmx_emulate_icr_write(u64 icr) {
         if (cpu_has_posted_interrupts()) {
                 u32 destination = (u32)(icr >> 32);
-        	u8 vector = icr & 0xFF;
+                u8 vector = icr & 0xFF;
 		send_posted_ipi(destination, vector);
 	}
 }
@@ -1762,7 +1762,7 @@ static int vmx_handle_msr_write(struct vmx_vcpu *vcpu)
  * vmx_handle_external_interrupt - when posted interrupt processing is enabled,
  * the "Acknowledge interrupt on exit" VM-exit control must be enabled as well.
  * Thus, when an external interrupt is received, it is automatically acknowledged
- * and the vector information is stored in the VMCS, but it is never actually 
+ * and the vector information is stored in the VMCS, but it is never actually
  * handled by the Linux kernel.
  *
  * This function calls the appropriate handling function in the kernel as though
@@ -1786,7 +1786,7 @@ static void vmx_handle_external_interrupt(struct vmx_vcpu *vcpu, u32 exit_intr_i
                 vector =  exit_intr_info & INTR_INFO_VECTOR_MASK;
                 desc = (gate_desc *)vcpu->idt_base + vector;
                 entry = gate_offset(*desc);
-	
+
 		if (vector == POSTED_INTR_VECTOR) {
 			apic_write_eoi();
 			return;
@@ -1802,12 +1802,12 @@ static void vmx_handle_external_interrupt(struct vmx_vcpu *vcpu, u32 exit_intr_i
                         "pushf\n\t"
                         __ASM_SIZE(push) " $%c[cs]\n\t"
                         "call *%[entry]\n\t"
-                        :     
+                        :
 #ifdef CONFIG_X86_64
                         [sp]"=&r"(tmp),
 #endif
 			"+r" (current_stack_pointer)
-                        :     
+                        :
                         [entry]"r"(entry),
                         [ss]"i"(__KERNEL_DS),
                         [cs]"i"(__KERNEL_CS)
@@ -1930,7 +1930,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 
 		setup_perf_msrs(vcpu);
 		vmx_handle_queued_interrupts(vcpu);
-		
+
 		ret = vmx_run_vcpu(vcpu);
 
 		/* We need to handle NMIs before interrupts are enabled */
@@ -1941,7 +1941,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		}
 
                 vmx_handle_external_interrupt(vcpu, exit_intr_info);
-	
+
 		local_irq_enable();
 
 		if (ret == EXIT_REASON_VMCALL ||
@@ -2114,7 +2114,7 @@ __init int vmx_init(void)
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_PKG_ENERGY_STATUS);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_RAPL_POWER_UNIT);
 
-	
+
 	/* APIC virtualization and posted interrupts */
 
 	//TODO: Enable intercept for computers that don't support APIC register virtualization
@@ -2135,7 +2135,7 @@ __init int vmx_init(void)
 		if (!posted_interrupt_descriptors[cpu]) {
 			return -ENOMEM;
 		}
-	} 
+	}
 
 	set_bit(0, vmx_vpid_bitmap); /* 0 is reserved for host */
 
