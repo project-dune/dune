@@ -24,6 +24,11 @@
 #define VMX_EPT_EXTENT_INDIVIDUAL_BIT           (1ull << 24)
 #endif
 
+#ifndef VMX_EPT_EXTENT_INDIVIDUAL_ADDR
+#define VMX_EPT_EXTENT_INDIVIDUAL_ADDR          0
+#endif
+
+
 #ifndef X86_CR4_PCIDE
 #define X86_CR4_PCIDE		0x00020000 /* enable PCID support */
 #endif
