@@ -750,7 +750,8 @@ static void ept_mmu_notifier_release(struct mmu_notifier *mn,
 }
 
 static const struct mmu_notifier_ops ept_mmu_notifier_ops = {
-	.invalidate_page	= ept_mmu_notifier_invalidate_page,
+	// TODO(alevy): I believe this needs to be converted to `invalidate_range`
+	//.invalidate_page	= ept_mmu_notifier_invalidate_page,
 	.invalidate_range_start	= ept_mmu_notifier_invalidate_range_start,
 	.invalidate_range_end	= ept_mmu_notifier_invalidate_range_end,
 	.clear_flush_young	= ept_mmu_notifier_clear_flush_young,

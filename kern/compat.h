@@ -128,7 +128,7 @@ static inline void cr4_clear_bits(unsigned long mask)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 static inline void compat_fpu_restore(void)
 {
-	if (!current->thread.fpu.fpregs_active)
+	if (current->thread.fpu.initialized)
 		fpu__restore(&current->thread.fpu);
 }
 #else

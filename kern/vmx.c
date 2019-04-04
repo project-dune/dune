@@ -539,7 +539,7 @@ static void vmx_setup_constant_host_state(struct vmx_vcpu *vcpu)
 
 	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS);  /* 22.2.3 */
 	vmcs_writel(HOST_CR4, __read_cr4());  /* 22.2.3, 22.2.5 */
-	vmcs_writel(HOST_CR3, read_cr3());  /* 22.2.3 */
+	vmcs_writel(HOST_CR3, read_cr3_pa());  /* 22.2.3 */
 
 	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);  /* 22.2.4 */
 	vmcs_write16(HOST_DS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
@@ -610,7 +610,7 @@ static unsigned long segment_base(u16 selector)
 	v = get_desc_base(d);
 #ifdef CONFIG_X86_64
        if (d->s == 0 && (d->type == 2 || d->type == 9 || d->type == 11))
-               v |= ((unsigned long)((struct ldttss_desc64 *)d)->base3) << 32;
+               v |= ((unsigned long)((ldt_desc *)d)->base3) << 32;
 #endif
 	return v;
 }
@@ -803,10 +803,9 @@ static u64 construct_eptp(unsigned long root_hpa)
 	u64 eptp;
 
 	/* TODO write the value reading from MSR */
-	eptp = VMX_EPT_DEFAULT_MT |
-		VMX_EPT_DEFAULT_GAW << VMX_EPT_GAW_EPTP_SHIFT;
+	eptp = VMX_EPTP_MT_WB | VMX_EPTP_PWL_4;
 	if (cpu_has_vmx_ept_ad_bits())
-		eptp |= VMX_EPT_AD_ENABLE_BIT;
+		eptp |= VMX_EPTP_AD_ENABLE_BIT;
 	eptp |= (root_hpa & PAGE_MASK);
 
 	return eptp;
@@ -1246,7 +1245,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vcpu->cpu = -1;
 	vcpu->syscall_tbl = (void *) &dune_syscall_tbl;
 
-	native_store_idt(&dt);
+	store_idt(&dt);
 	vcpu->idt_base = (void *)dt.address;
 
 	spin_lock_init(&vcpu->ept_lock);
@@ -1782,7 +1781,7 @@ static void vmx_handle_external_interrupt(struct vmx_vcpu *vcpu, u32 exit_intr_i
 		register unsigned long current_stack_pointer asm(_ASM_SP);
 		vector =  exit_intr_info & INTR_INFO_VECTOR_MASK;
 		desc = (gate_desc *)vcpu->idt_base + vector;
-		entry = gate_offset(*desc);
+		entry = gate_offset(desc);
 
 		if (vector == POSTED_INTR_VECTOR) {
 			dune_apic_write_eoi();

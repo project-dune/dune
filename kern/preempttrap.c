@@ -1,3 +1,4 @@
+#include <linux/sched/task_stack.h>
 #include <linux/uaccess.h>
 #include <linux/user-return-notifier.h>
 
