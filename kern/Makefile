@@ -10,7 +10,6 @@ list-m :=
 list-$(CONFIG_DUNE) += dune
 obj-$(CONFIG_DUNE) += dune.o
 dune-objs := \
-	apic.o \
 	core.o \
 	vmx.o \
 	ept.o \

@@ -1,7 +1,7 @@
 /*
  * local.h - internal definitions
  */
-#include <stdbool.h>
+
 
 // standard definitions
 #define __str_t(x...)	#x
@@ -22,6 +22,3 @@ extern char __dune_vsyscall_page;
 
 // initialization
 extern int dune_page_init(void);
-bool dune_setup_apic(void);
-void dune_apic_free(void);
-void dune_apic_init_rt_entry(void);

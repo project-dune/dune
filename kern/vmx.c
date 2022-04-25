@@ -57,27 +57,17 @@
 #include <asm/unistd_64.h>
 #include <asm/virtext.h>
 #include <asm/traps.h>
-#include <asm/bitops.h>
 
 #include "dune.h"
 #include "vmx.h"
 #include "compat.h"
-#include "apic.h"
 
 static atomic_t vmx_enable_failed;
 
 static DECLARE_BITMAP(vmx_vpid_bitmap, VMX_NR_VPIDS);
 static DEFINE_SPINLOCK(vmx_vpid_lock);
 
-typedef struct posted_interrupt_desc {
-	u32 vectors[8];	/* posted interrupt vectors */
-	u32 extra[8];	/* outstanding notification indicator and extra space the VMM can use */
-} __aligned(64) posted_interrupt_desc;
-
 static unsigned long *msr_bitmap;
-static struct vmx_vcpu *vcpus_hash[NR_CPUS];
-static void *virtual_apic_pages[NR_CPUS];
-static posted_interrupt_desc *posted_interrupt_descriptors[NR_CPUS];
 
 #define NUM_SYSCALLS 312
 
@@ -160,16 +150,6 @@ static inline bool cpu_has_vmx_invept_global(void)
 static inline bool cpu_has_vmx_ept_ad_bits(void)
 {
 	return vmx_capability.ept & VMX_EPT_AD_BIT;
-}
-
-static inline bool cpu_has_apic_register_virt(void)
-{
-	return (vmx_capability.secondary >> 32) & SECONDARY_EXEC_APIC_REGISTER_VIRT;
-}
-
-static inline bool cpu_has_posted_interrupts(void)
-{
-	return (vmx_capability.pin_based >> 32) & PIN_BASED_POSTED_INTR;
 }
 
 static inline void __invept(int ext, u64 eptp, gpa_t gpa)
@@ -375,15 +355,10 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 	u32 _vmentry_control = 0;
 
 	min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
-	opt = PIN_BASED_VIRTUAL_NMIS | PIN_BASED_POSTED_INTR;
+	opt = PIN_BASED_VIRTUAL_NMIS;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_PINBASED_CTLS,
 				&_pin_based_exec_control) < 0)
 		return -EIO;
-
-	rdmsrl(MSR_IA32_VMX_PINBASED_CTLS, vmx_capability.pin_based);
-	if (vmx_capability.pin_based & (((u64)1) << 55)) {
-		rdmsrl(MSR_IA32_VMX_TRUE_PINBASED_CTLS, vmx_capability.pin_based);
-	}
 
 	min =
 #ifdef CONFIG_X86_64
@@ -413,10 +388,7 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 			SECONDARY_EXEC_ENABLE_VPID |
 			SECONDARY_EXEC_ENABLE_EPT |
 			SECONDARY_EXEC_RDTSCP |
-			SECONDARY_EXEC_ENABLE_INVPCID |
-			SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE |
-			SECONDARY_EXEC_APIC_REGISTER_VIRT |
-			SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY;
+			SECONDARY_EXEC_ENABLE_INVPCID;
 		if (adjust_vmx_controls(min2, opt2,
 					MSR_IA32_VMX_PROCBASED_CTLS2,
 					&_cpu_based_2nd_exec_control) < 0)
@@ -436,14 +408,13 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 		rdmsr(MSR_IA32_VMX_EPT_VPID_CAP,
 		      vmx_capability.ept, vmx_capability.vpid);
 	}
-	rdmsrl(MSR_IA32_VMX_PROCBASED_CTLS2, vmx_capability.secondary);
 
 	min = 0;
 #ifdef CONFIG_X86_64
 	min |= VM_EXIT_HOST_ADDR_SPACE_SIZE;
 #endif
 //	opt = VM_EXIT_SAVE_IA32_PAT | VM_EXIT_LOAD_IA32_PAT;
-	opt = VM_EXIT_ACK_INTR_ON_EXIT;
+	opt = 0;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
 				&_vmexit_control) < 0)
 		return -EIO;
@@ -531,11 +502,11 @@ static void vmx_free_vmcs(struct vmcs *vmcs)
  * Note that host-state that does change is set elsewhere. E.g., host-state
  * that is set differently for each CPU is set in vmx_vcpu_load(), not here.
  */
-static void vmx_setup_constant_host_state(struct vmx_vcpu *vcpu)
+static void vmx_setup_constant_host_state(void)
 {
 	u32 low32, high32;
 	unsigned long tmpl;
-	//struct desc_ptr dt;
+	struct desc_ptr dt;
 
 	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS);  /* 22.2.3 */
 	vmcs_writel(HOST_CR4, __read_cr4());  /* 22.2.3, 22.2.5 */
@@ -547,7 +518,8 @@ static void vmx_setup_constant_host_state(struct vmx_vcpu *vcpu)
 	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
 	vmcs_write16(HOST_TR_SELECTOR, GDT_ENTRY_TSS*8);  /* 22.2.4 */
 
-	vmcs_writel(HOST_IDTR_BASE, (unsigned long)vcpu->idt_base);   /* 22.2.4 */
+	native_store_idt(&dt);
+	vmcs_writel(HOST_IDTR_BASE, dt.address);   /* 22.2.4 */
 
 	asm("mov $.Lkvm_vmx_return, %0" : "=r"(tmpl));
 	vmcs_writel(HOST_RIP, tmpl); /* 22.2.5 */
@@ -954,103 +926,7 @@ static void setup_msr(struct vmx_vcpu *vcpu)
 	vmcs_write64(VM_ENTRY_MSR_LOAD_ADDR, __pa(vcpu->msr_autoload.guest));
 }
 
-enum vapic_reg {
-	LOCAL_APIC_ID
-};
-
-/*
- * vapic_write
- * Writes to the virtual APIC page.
- *
- * [vapic_page] is a pointer to the virtual APIC page.
- * [reg] is the register to write to within the virtual APIC page.
- * [value] is the value to write within the virtual APIC page.
- */
-static void vapic_write(void *vapic_page, enum vapic_reg reg, u64 value)
-{
-	size_t offset = 0x0;
-	switch (reg) {
-	case (LOCAL_APIC_ID):
-		offset = 0x20;
-		break;
-	default:
-		return;
-		break;
-	}
-	*(u64 *)((char *)vapic_page + offset) = value;
-}
-
-/* update_vapic_addresses - if a thread is not pinned to a core, it can be scheduled
- * on a different core from the core it was originally created on. Thus, the vcpu
- * must be updated to use the virtual APIC page and the posted interrupt descriptor
- * that correspond to the core it is currently running on.
- */
-static inline void update_vapic_addresses(struct vmx_vcpu *vcpu)
-{
-	void *vapic_page, *posted_interrupt_descriptor;
-	if (cpu_has_apic_register_virt()) {
-		vapic_page = virtual_apic_pages[raw_smp_processor_id()];
-		vmcs_write64(VIRTUAL_APIC_PAGE_ADDR, __pa(vapic_page));
-	}
-	if (cpu_has_posted_interrupts()) {
-		posted_interrupt_descriptor = posted_interrupt_descriptors[raw_smp_processor_id()];
-		vmcs_write64(POSTED_INTR_DESC_ADDR, __pa(posted_interrupt_descriptor));
-	}
-}
-
-static void setup_vapic(struct vmx_vcpu *vcpu)
-{
-	void *vapic_page;
-	u32 local_apic_id;
-
-	dune_apic_init_rt_entry();
-	update_vapic_addresses(vcpu);
-
-	if (cpu_has_apic_register_virt()) {
-		vapic_page = virtual_apic_pages[raw_smp_processor_id()];
-		local_apic_id = dune_apic_id();
-		vapic_write(vapic_page, LOCAL_APIC_ID, local_apic_id);
-	}
-
-	if (cpu_has_posted_interrupts()) {
-		vmcs_write16(POSTED_INTR_NV, POSTED_INTR_VECTOR);
-	}
-}
-
-/*
- * send_posted_ipi - sends a posted IPI for [vector] to the indicated apic
- *
- * According to the Intel manual, you must use locked read-modify-write
- * instructions to modify a posted interrupt descriptor. It is safe to
- * modify this descriptor even when the VMCS it belongs to is active.
- */
-static void send_posted_ipi(u32 apic_id, u8 vector)
-{
-	posted_interrupt_desc *desc;
-	bool cpu_id_error = false;
-	u32 cpu_id = dune_apic_get_cpu_id_for_apic(apic_id, &cpu_id_error);
-	if (cpu_id_error) {
-		//the local APIC ID either doesn't exist or corresponds to a core
-		//that the Dune process is not running on
-		return;
-	}
-	desc = posted_interrupt_descriptors[cpu_id];
-	//first set the posted-interrupt request
-	if (test_and_set_bit(vector, (unsigned long *)desc->vectors)) {
-		//bit already set, so the interrupt is already pending (and
-		//the outstanding notification bit is 1)
-		return;
-	}
-	//set the outstanding notification bit to 1
-	if (test_and_set_bit(0, (unsigned long *)desc->extra)) {
-		//bit already set, so there is an interrupt(s) already pending
-		return;
-	}
-	//now send the posted interrupt vector to the destination
-	dune_apic_send_ipi(POSTED_INTR_VECTOR, apic_id);
-}
-
-/*
+/**
  *  vmx_setup_vmcs - configures the vmcs with starting parameters
  */
 static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
@@ -1077,7 +953,6 @@ static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
 	vmcs_write32(CR3_TARGET_COUNT, 0);           /* 22.2.1 */
 
 	setup_msr(vcpu);
-	setup_vapic(vcpu);
 #if 0
 	if (vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_IA32_PAT) {
 		u32 msr_low, msr_high;
@@ -1119,7 +994,7 @@ static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
 
 	vmcs_write32(EXCEPTION_BITMAP, 1 << X86_TRAP_DB | 1 << X86_TRAP_BP);
 
-	vmx_setup_constant_host_state(vcpu);
+	vmx_setup_constant_host_state();
 }
 
 /**
@@ -1214,7 +1089,6 @@ static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config
 static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 {
 	struct vmx_vcpu *vcpu;
-	struct desc_ptr dt;
 
 	if (conf->vcpu) {
 		/* This Dune configuration already has a VCPU. */
@@ -1246,9 +1120,6 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	vcpu->cpu = -1;
 	vcpu->syscall_tbl = (void *) &dune_syscall_tbl;
 
-	native_store_idt(&dt);
-	vcpu->idt_base = (void *)dt.address;
-
 	spin_lock_init(&vcpu->ept_lock);
 	if (vmx_init_ept(vcpu))
 		goto fail_ept;
@@ -1267,7 +1138,6 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	if (vmx_create_ept(vcpu))
 		goto fail_ept;
 
-	vcpus_hash[raw_smp_processor_id()] = vcpu;
 	return vcpu;
 
 fail_ept:
@@ -1731,155 +1601,6 @@ static int vmx_handle_nmi_exception(struct vmx_vcpu *vcpu)
 	return -EIO;
 }
 
-static void vmx_emulate_icr_write(u64 icr)
-{
-	if (cpu_has_posted_interrupts()) {
-		u32 destination = (u32)(icr >> 32);
-		u8 vector = icr & 0xFF;
-		send_posted_ipi(destination, vector);
-	}
-}
-
-static int vmx_handle_msr_write(struct vmx_vcpu *vcpu)
-{
-	u32 msr_addr;
-	u64 msr_data;
-	msr_addr = vcpu->regs[VCPU_REGS_RCX];
-	msr_data = (vcpu->regs[VCPU_REGS_RAX] & -1u)
-			| ((u64)(vcpu->regs[VCPU_REGS_RDX] & -1u) << 32);
-	switch (msr_addr) {
-	case (APIC_BASE_MSR + (APIC_ICR >> 4)):
-		vmx_emulate_icr_write(msr_data);
-		break;
-	default:
-		return -1;
-	}
-	return 0;
-}
-
-/*
- * vmx_handle_external_interrupt - when posted interrupt processing is enabled,
- * the "Acknowledge interrupt on exit" VM-exit control must be enabled as well.
- * Thus, when an external interrupt is received, it is automatically acknowledged
- * and the vector information is stored in the VMCS, but it is never actually
- * handled by the Linux kernel.
- *
- * This function calls the appropriate handling function in the kernel as though
- * the interrupt were never intercepted.
- *
- * This code is from KVM.
- */
-static void vmx_handle_external_interrupt(struct vmx_vcpu *vcpu, u32 exit_intr_info)
-{
-	if ((exit_intr_info & (INTR_INFO_VALID_MASK | INTR_INFO_INTR_TYPE_MASK))
-		== (INTR_INFO_VALID_MASK | INTR_TYPE_EXT_INTR)) {
-		unsigned int vector;
-		unsigned long entry;
-		gate_desc *desc;
-#ifdef CONFIG_X86_64
-		unsigned long tmp;
-#endif
-		register unsigned long current_stack_pointer asm(_ASM_SP);
-		vector =  exit_intr_info & INTR_INFO_VECTOR_MASK;
-		desc = (gate_desc *)vcpu->idt_base + vector;
-		entry = gate_offset(*desc);
-
-		if (vector == POSTED_INTR_VECTOR) {
-			dune_apic_write_eoi();
-			return;
-		}
-
-		asm volatile(
-#ifdef CONFIG_X86_64
-					"mov %%" _ASM_SP ", %[sp]\n\t"
-					"and $0xfffffffffffffff0, %%" _ASM_SP "\n\t"
-					"push $%c[ss]\n\t"
-					"push %[sp]\n\t"
-#endif
-					"pushf\n\t"
-					__ASM_SIZE(push) " $%c[cs]\n\t"
-					"call *%[entry]\n\t"
-					:
-#ifdef CONFIG_X86_64
-					[sp]"=&r"(tmp),
-#endif
-					"+r" (current_stack_pointer)
-					:
-					[entry]"r"(entry),
-					[ss]"i"(__KERNEL_DS),
-					[cs]"i"(__KERNEL_CS)
-				);
-	}
-}
-
-static inline char get_bit(u64 data, size_t pos)
-{
-	return (data & ((u64)1 << pos)) >> pos;
-}
-
-/* vmx_handle_queued_interrupts - sometimes a posted interrupt is sent to a core
- * that is not currently in VMX non-root mode. In this case, the interrupt
- * is still pending in the posted interrupt descriptor, but it needs to be
- * inserted into the guest OS.
- *
- * Part of the algorithm here is from section 29.6 of the Intel manual.
- * According to the Intel manual (section 29.2.1), virtual interrupts are
- * delivered on VM entry, so we just need to set the vIRR and the RVI here,
- * and the interrupt will be delivered on VM entry.
- */
-static void vmx_handle_queued_interrupts(struct vmx_vcpu *vcpu)
-{
-	u64 vectors[4];
-	long i, j, vector;
-	u16 guest_interrupt_status;
-	u8 rvi;
-	void *vapic_page;
-	u32 *to_set;
-	u32 mask;
-
-	//This has a minor synchronization issue:
-	//Let's say core A sends a posted IPI to core B, and core B
-	//calls this function to handle the queued interrupt
-	//It is possible for core B to clear the outstanding bit, then
-	//A sends another interrupt, then B clears all of the interrupt
-	//bits (but not the outstanding bit, which has been set again
-	//since A sent the interrupt)
-	//Thus, it is possible for the outstanding bit to be set but
-	//no interrupt to be pending... this will not cause
-	//functionality issues though
-	struct posted_interrupt_desc *desc = posted_interrupt_descriptors[raw_smp_processor_id()];
-	u64 outstanding = __atomic_exchange_n((u64 *)desc->extra, 0x0, 0);
-	if (get_bit(outstanding, 0)) {
-		//there is a pending interrupt(s)
-		//copy bits 0-255 into a local buffer
-		guest_interrupt_status = vmcs_read16(GUEST_INTR_STATUS);
-		rvi = guest_interrupt_status & 0xFF;
-		for (i = 0; i < 4; i++) {
-			vectors[i] = __atomic_exchange_n((u64 *)desc->vectors + i, 0x0, 0);
-		}
-		for (i = 0; i < 4; i++) {
-			if (vectors[i] == 0) continue;
-			for (j = 0; j < 64; j++) {
-				if (get_bit(vectors[i], j)) {
-					vector = (i * 64) + j;
-					//set the corresponding bit in the vIRR
-					vapic_page = __va(vmcs_read64(VIRTUAL_APIC_PAGE_ADDR));
-					to_set = (u32 *)((char *)vapic_page + (0x200 | ((vector & 0xE0) >> 1)));
-					//set the bit at position (vector & 0x1F)
-					mask = 1 << (vector & 0x1F);
-					*to_set |= mask;
-
-					//update the value to be written to RVI
-					rvi = rvi > vector ? rvi : vector;
-				}
-			}
-		}
-		//set RVI
-		guest_interrupt_status |= (u16)rvi;
-		vmcs_write16(GUEST_INTR_STATUS, guest_interrupt_status);
-	}
-}
-
 /**
  * vmx_launch - the main loop for a VMX Dune process
  * @conf: the launch configuration
@@ -1888,7 +1609,6 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 {
 	int ret, done = 0;
 	u32 exit_intr_info;
-	bool rescheduled = false;
 	struct vmx_vcpu *vcpu = vmx_create_vcpu(conf);
 	if (!vcpu)
 		return -ENOMEM;
@@ -1898,10 +1618,6 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 
 	while (1) {
 		vmx_get_cpu(vcpu);
-		if (rescheduled) {
-			update_vapic_addresses(vcpu);
-			rescheduled = false;
-		}
 
 		/*
 		 * We assume that a Dune process will always use
@@ -1915,7 +1631,6 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		local_irq_disable();
 
 		if (need_resched()) {
-			rescheduled = true;
 			local_irq_enable();
 			vmx_put_cpu(vcpu);
 			cond_resched();
@@ -1933,7 +1648,6 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		}
 
 		setup_perf_msrs(vcpu);
-		vmx_handle_queued_interrupts(vcpu);
 
 		ret = vmx_run_vcpu(vcpu);
 
@@ -1944,13 +1658,10 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			asm("int $2");
 		}
 
-		vmx_handle_external_interrupt(vcpu, exit_intr_info);
-
 		local_irq_enable();
 
 		if (ret == EXIT_REASON_VMCALL ||
-			ret == EXIT_REASON_CPUID ||
-			ret == EXIT_REASON_MSR_WRITE) {
+		    ret == EXIT_REASON_CPUID) {
 			vmx_step_instruction();
 		}
 
@@ -1965,12 +1676,9 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		else if (ret == EXIT_REASON_EXCEPTION_NMI) {
 			if (vmx_handle_nmi_exception(vcpu))
 				done = 1;
-		} else if (ret == EXIT_REASON_MSR_WRITE) {
-			if (vmx_handle_msr_write(vcpu))
-				done = 1;
 		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT) {
 			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
-					ret, vmcs_read32(EXIT_QUALIFICATION));
+			       ret, vmcs_read32(EXIT_QUALIFICATION));
 			vcpu->ret_code = DUNE_RET_UNHANDLED_VMEXIT;
 			vmx_dump_cpu(vcpu);
 			done = 1;
@@ -1981,7 +1689,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 	}
 
 	printk(KERN_ERR "vmx: stopping VCPU (VPID %d)\n",
-			vcpu->vpid);
+	       vcpu->vpid);
 
 	*ret_code = vcpu->ret_code;
 
@@ -2075,19 +1783,6 @@ static void vmx_free_vmxon_areas(void)
 	}
 }
 
-static void free_virtual_apic_pages(void)
-{
-	int cpu;
-	for_each_possible_cpu(cpu) {
-		if (virtual_apic_pages[cpu]) {
-			free_page((unsigned long)virtual_apic_pages[cpu]);
-		}
-		if (posted_interrupt_descriptors[cpu]) {
-			free_page((unsigned long)posted_interrupt_descriptors[cpu]);
-		}
-	}
-}
-
 /**
  * vmx_init - the main initialization routine for this driver
  */
@@ -2124,42 +1819,13 @@ __init int vmx_init(void)
 	if (!msr_bitmap) {
 		return -ENOMEM;
 	}
+	/* FIXME: do we need APIC virtualization (flexpriority?) */
 
 	memset(msr_bitmap, 0xff, PAGE_SIZE);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_FS_BASE);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_GS_BASE);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_PKG_ENERGY_STATUS);
 	__vmx_disable_intercept_for_msr(msr_bitmap, MSR_RAPL_POWER_UNIT);
-
-
-	/* APIC virtualization and posted interrupts */
-
-	if (cpu_has_apic_register_virt()) {
-		__vmx_disable_intercept_for_msr(msr_bitmap, APIC_BASE_MSR + (APIC_ID >> 4));
-		__vmx_disable_intercept_for_msr(msr_bitmap, APIC_BASE_MSR + (APIC_EOI >> 4));
-	}
-
-	if (!dune_apic_init()) {
-		printk(KERN_ERR "vmx: could not initialize APIC routing table\n");
-		return -EIO;
-	}
-
-	memset(virtual_apic_pages, 0, sizeof(void *) * NR_CPUS);
-	memset(posted_interrupt_descriptors, 0, sizeof(posted_interrupt_desc *) * NR_CPUS);
-	for_each_possible_cpu(cpu) {
-		virtual_apic_pages[cpu] = (void *)__get_free_page(GFP_KERNEL);
-		if (!virtual_apic_pages[cpu]) {
-			r = -ENOMEM;
-			goto failed3;
-		}
-		memset(virtual_apic_pages[cpu], 0x00, PAGE_SIZE);
-		posted_interrupt_descriptors[cpu] = (posted_interrupt_desc *)__get_free_page(GFP_KERNEL);
-		if (!posted_interrupt_descriptors[cpu]) {
-			r = -ENOMEM;
-			goto failed3;
-		}
-		memset(posted_interrupt_descriptors[cpu], 0x00, PAGE_SIZE);
-	}
 
 	set_bit(0, vmx_vpid_bitmap); /* 0 is reserved for host */
 
@@ -2189,8 +1855,6 @@ __init int vmx_init(void)
 
 	return 0;
 
-failed3:
-	free_virtual_apic_pages();
 failed2:
 	on_each_cpu(vmx_disable, NULL, 1);
 failed1:
@@ -2206,7 +1870,5 @@ void vmx_exit(void)
 	vmx_cleanup();
 	on_each_cpu(vmx_disable, NULL, 1);
 	vmx_free_vmxon_areas();
-	dune_apic_free();
-	free_virtual_apic_pages();
 	free_page((unsigned long)msr_bitmap);
 }

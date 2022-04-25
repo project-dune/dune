@@ -16,8 +16,6 @@ struct vmcs {
 };
 
 struct vmx_capability {
-	u64 pin_based;
-	u64 secondary;
 	u32 ept;
 	u32 vpid;
 	int has_load_efer:1;
@@ -81,7 +79,6 @@ struct vmx_vcpu {
 	void *syscall_tbl;
 	struct dune_config *conf;
 	unsigned long guest_kernel_gs_base;
-	void *idt_base;
 };
 
 extern __init int vmx_init(void);
