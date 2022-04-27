@@ -1178,36 +1178,26 @@ void vmx_cleanup(void)
 	}
 }
 
-static int dune_exit(int error_code)
+static long dune_exit(int error_code, struct vmx_vcpu *vcpu)
 {
-	struct vmx_vcpu *vcpu;
+    vcpu->shutdown = 1;
+    vcpu->ret_code = DUNE_RET_EXIT;
+    vcpu->conf->status = error_code;
 
-	/* FIXME: not totally safe depending on GCC */
-	asm("movq %%r11, %0" : "=r"(vcpu));
-
-	vcpu->shutdown = 1;
-	vcpu->ret_code = DUNE_RET_EXIT;
-	vcpu->conf->status = error_code;
-
-	return 0;
+    return 0;
 }
 
-static int dune_exit_group(int error_code)
+static long dune_exit_group(int error_code, struct vmx_vcpu *vcpu)
 {
-	/* NOTE: we're supposed to send a signal to other threads before
-	 * exiting. Because we don't yet support signals we do nothing
-	 * extra for now.
-	 */
-	struct vmx_vcpu *vcpu;
+    /* NOTE: we're supposed to send a signal to other threads before
+     * exiting. Because we don't yet support signals we do nothing
+     * extra for now.
+     */
+    vcpu->shutdown = 1;
+    vcpu->ret_code = DUNE_RET_EXIT;
+    vcpu->conf->status = error_code;
 
-	/* FIXME: not totally safe depending on GCC */
-	asm("movq %%r11, %0" : "=r"(vcpu));
-
-	vcpu->shutdown = 1;
-	vcpu->ret_code = DUNE_RET_EXIT;
-	vcpu->conf->status = error_code;
-
-	return 0;
+    return 0;
 }
 
 static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
@@ -1254,76 +1244,40 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	regs->ss = __USER_DS;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
-		void __user *parent_tid, void __user *child_tid,
-		unsigned long tls)
+                           void __user *parent_tid, void __user *child_tid,
+                           unsigned long tls, struct vmx_vcpu *vcpu)
 {
-	struct vmx_vcpu *vcpu;
-	struct pt_regs regs;
+    struct pt_regs regs;
+    make_pt_regs(vcpu, &regs, __NR_clone);
+    if (!newsp)
+        newsp = regs.sp;
 
-	asm("movq %%r11, %0" : "=r"(vcpu));
-
-	make_pt_regs(vcpu, &regs, __NR_clone);
-	if (!newsp)
-		newsp = regs.sp;
-
-	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
-			    tls);
-}
-#else
-static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
-		void __user *parent_tid, void __user *child_tid)
-{
-	struct vmx_vcpu *vcpu;
-	struct pt_regs regs;
-
-	asm("movq %%r11, %0" : "=r"(vcpu));
-
-	make_pt_regs(vcpu, &regs, __NR_clone);
-	if (!newsp)
-		newsp = regs.sp;
-
-	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
-			    0);
-}
-#endif
-
-static long dune_sys_fork(void)
-{
-	struct vmx_vcpu *vcpu;
-	struct pt_regs regs;
-	
-	asm("movq %%r11, %0" : "=r"(vcpu));
-
-	make_pt_regs(vcpu, &regs, __NR_fork);
-
-	return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL, 0);
+    return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
+                        tls);
 }
 
-static long dune_sys_vfork(void)
+static long dune_sys_fork(struct vmx_vcpu *vcpu)
 {
-	struct vmx_vcpu *vcpu;
-	struct pt_regs regs;
-	
-	asm("movq %%r11, %0" : "=r"(vcpu));
+    struct pt_regs regs;
+    make_pt_regs(vcpu, &regs, __NR_fork);
 
-	make_pt_regs(vcpu, &regs, __NR_vfork);
+    return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL, 0);
+}
 
-	return dune_do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp,
-			    &regs, 0, NULL, NULL, 0);
+static long dune_sys_vfork(struct vmx_vcpu *vcpu)
+{
+    struct pt_regs regs;
+    make_pt_regs(vcpu, &regs, __NR_vfork);
+
+    return dune_do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp, &regs, 0,
+                        NULL, NULL, 0);
 }
 
 static void vmx_init_syscall(void)
 {
 	memcpy(dune_syscall_tbl, (void *) SYSCALL_TBL,
 	       sizeof(sys_call_ptr_t) * NUM_SYSCALLS);
-	
-	dune_syscall_tbl[__NR_exit] = (void *) &dune_exit;
-	dune_syscall_tbl[__NR_exit_group] = (void *) &dune_exit_group;
-	dune_syscall_tbl[__NR_clone] = (void *) &dune_sys_clone;
-	dune_syscall_tbl[__NR_fork] = (void *) &dune_sys_fork;
-	dune_syscall_tbl[__NR_vfork] = (void *) &dune_sys_vfork;
 }
 
 #ifdef CONFIG_X86_64
@@ -1506,69 +1460,90 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 
 static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 {
-	__u64 orig_rax;
+    typedef long (*sys_fn)(struct pt_regs *);
+    sys_fn *tbl;
+    struct pt_regs args;
 
-	if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
-		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
-		return;
-	}
-	
-	if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
-		     vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
-		printk(KERN_INFO "vmx: got unsupported syscall\n");
-		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
-		return;
-	}
+    __u64 orig_rax;
+    long ret;
 
-	orig_rax = vcpu->regs[VCPU_REGS_RAX];
+    printk(KERN_ERR
+           "vmx: %d: syscall %d(0x%llx,0x%llx,0x%llx,0x%llx,0x%llx,0x%llx) from 0x%llx\n",
+           current->pid, (int)vcpu->regs[VCPU_REGS_RAX],
+           vcpu->regs[VCPU_REGS_RDI], vcpu->regs[VCPU_REGS_RSI],
+           vcpu->regs[VCPU_REGS_RDX], vcpu->regs[VCPU_REGS_R10],
+           vcpu->regs[VCPU_REGS_R8], vcpu->regs[VCPU_REGS_R9],
+           vcpu->regs[VCPU_REGS_RCX]);
 
-	asm(
-		"mov %c[rax](%0), %%"R"ax \n\t"
-		"mov %c[rdi](%0), %%"R"di \n\t"
-		"mov %c[rsi](%0), %%"R"si \n\t"
-		"mov %c[rdx](%0), %%"R"dx \n\t"
-		"mov %c[r8](%0),  %%r8  \n\t"
-		"mov %c[r9](%0),  %%r9  \n\t"
-		"mov %c[syscall](%0), %%r10 \n\t"
-		"mov %0, %%r11 \n\t"
-		"push %0 \n\t"
-		"mov %c[r10](%0), %%"R"cx \n\t"
-		"shl $3, %%rax \n\t"
-		"add %%r10, %%rax\n\t"
-		"call *(%%rax) \n\t"
-		"pop %0 \n\t"
-		"mov %%"R"ax, %c[rax](%0) \n\t"
+    if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
+        vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
+        return;
+    }
 
-		: : "c"(vcpu),
-		[syscall]"i"(offsetof(struct vmx_vcpu, syscall_tbl)),
-		[rax]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RAX])),
-		[rdi]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RDI])),
-		[rsi]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RSI])),
-		[rdx]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RDX])),
-		[r10]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R10])),
-		[r8]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R8])),
-		[r9]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R9]))
-	      : "cc", "memory", R"ax", R"dx", R"di", R"si", "r8", "r9", "r10"
-	);
+    if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
+                 vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
+        printk(KERN_INFO "vmx: got unsupported syscall\n");
+        vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
+        return;
+    }
 
-	/* We apply the restart semantics as if no signal handler will be
+    orig_rax = vcpu->regs[VCPU_REGS_RAX];
+
+    switch (orig_rax) {
+    case __NR_clone:
+        ret = dune_sys_clone(vcpu->regs[VCPU_REGS_RDI],
+                             vcpu->regs[VCPU_REGS_RSI],
+                             (void *)vcpu->regs[VCPU_REGS_RDX],
+                             (void *)vcpu->regs[VCPU_REGS_R10],
+                             vcpu->regs[VCPU_REGS_R8], vcpu);
+        break;
+    case __NR_fork:
+        ret = dune_sys_fork(vcpu);
+        break;
+    case __NR_vfork:
+        ret = dune_sys_vfork(vcpu);
+        break;
+    case __NR_exit:
+        ret = dune_exit(vcpu->regs[VCPU_REGS_RDI], vcpu);
+        break;
+    case __NR_exit_group:
+        ret = dune_exit_group(vcpu->regs[VCPU_REGS_RDI], vcpu);
+        break;
+    default:
+        args = (struct pt_regs){
+            .ax = vcpu->regs[VCPU_REGS_RAX],
+            .di = vcpu->regs[VCPU_REGS_RDI],
+            .si = vcpu->regs[VCPU_REGS_RSI],
+            .dx = vcpu->regs[VCPU_REGS_RDX],
+            .r10 = vcpu->regs[VCPU_REGS_R10],
+            .r8 = vcpu->regs[VCPU_REGS_R8],
+            .r9 = vcpu->regs[VCPU_REGS_R9],
+        };
+        tbl = (sys_fn *)vcpu->syscall_tbl;
+        ret = tbl[orig_rax](&args);
+        break;
+    }
+
+    vcpu->regs[VCPU_REGS_RAX] = ret;
+
+    /* We apply the restart semantics as if no signal handler will be
 	 * executed. */
-	switch (vcpu->regs[VCPU_REGS_RAX]) {
-	case -ERESTARTNOHAND:
-	case -ERESTARTSYS:
-	case -ERESTARTNOINTR:
-		vcpu->regs[VCPU_REGS_RAX] = orig_rax;
-		vmx_get_cpu(vcpu);
-		vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
-		vmx_put_cpu(vcpu);
-		break;
-	case -ERESTART_RESTARTBLOCK:
-		vcpu->regs[VCPU_REGS_RAX] = __NR_restart_syscall;
-		vmx_get_cpu(vcpu);
-		vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
-		vmx_put_cpu(vcpu);
-		break;
-	}
+    switch (vcpu->regs[VCPU_REGS_RAX]) {
+    case -ERESTARTNOHAND:
+    case -ERESTARTSYS:
+    case -ERESTARTNOINTR:
+        vcpu->regs[VCPU_REGS_RAX] = orig_rax;
+        vmx_get_cpu(vcpu);
+        vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
+        vmx_put_cpu(vcpu);
+        break;
+    case -ERESTART_RESTARTBLOCK:
+        vcpu->regs[VCPU_REGS_RAX] = __NR_restart_syscall;
+        vmx_get_cpu(vcpu);
+        vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
+        vmx_put_cpu(vcpu);
+        break;
+    }
 }
 
 static void vmx_handle_cpuid(struct vmx_vcpu *vcpu)
