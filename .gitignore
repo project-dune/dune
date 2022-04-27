@@ -28,4 +28,5 @@ test/test_sandbox
 test/timetest
 test/hugepages
 test/mprotect
+test/fork
 tags
