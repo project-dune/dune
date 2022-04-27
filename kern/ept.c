@@ -8,7 +8,7 @@
  * process page table. Mappings are created lazily as they are needed.
  * We keep the EPT synchronized with the process page table through
  * mmu_notifier callbacks.
- * 
+ *
  * Some of the low-level EPT functions are based on KVM.
  * Original Authors:
  *   Avi Kivity   <avi@qumranet.com>
@@ -355,6 +355,41 @@ static int ept_clear_l2_epte(epte_t *epte)
 	return 1;
 }
 
+static int hva_to_pfn_remapped(struct vm_area_struct *vma, unsigned long hva,
+							   bool make_write, unsigned long *pfn)
+{
+	/*
+	 * this code is adapted from KVM:
+	 * get_user_pages fails for VM_IO and VM_PFNMAP vmas and does
+	 * not call the fault handler, so do it here.
+	 */
+	pte_t *ptep;
+	spinlock_t *ptl;
+	int r;
+
+	r = follow_pte(vma->vm_mm, hva, &ptep, &ptl);
+	if (r) {
+		bool unlocked = false;
+		r = fixup_user_fault(current->mm, hva,
+							 make_write ? FAULT_FLAG_WRITE : 0, &unlocked);
+		if (unlocked) {
+			return -EAGAIN;
+		}
+		if (r) {
+			return r;
+		}
+
+		r = follow_pte(vma->vm_mm, hva, &ptep, &ptl);
+		if (r) {
+			return r;
+		}
+	}
+
+	pte_unmap_unlock(ptep, ptl);
+	*pfn = pte_pfn(*ptep);
+	return r;
+}
+
 static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 							   unsigned long gpa, unsigned long hva)
 {
@@ -377,7 +412,8 @@ static int ept_set_pfnmap_epte(struct vmx_vcpu *vcpu, int make_write,
 		return -EFAULT;
 	}
 
-	ret = follow_pfn(vma, hva, &pfn);
+	while ((ret = hva_to_pfn_remapped(vma, hva, make_write, &pfn)) == -EAGAIN)
+		;
 	if (ret) {
 		up_read(&mm->mmap_sem);
 		return ret;
@@ -515,7 +551,7 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
  * @vcpu: the vcpu
  * @mm: the process's mm_struct
  * @addr: the address of the page
- * 
+ *
  * Returns 1 if the page was removed, 0 otherwise
  */
 static int ept_invalidate_page(struct vmx_vcpu *vcpu, struct mm_struct *mm,
@@ -551,7 +587,7 @@ static int ept_invalidate_page(struct vmx_vcpu *vcpu, struct mm_struct *mm,
  * @vcpu: the vcpu
  * @mm: the process's mm_struct
  * @addr: the address of the page
- * 
+ *
  * Returns 1 if the page is mapped, 0 otherwise
  */
 static int ept_check_page_mapped(struct vmx_vcpu *vcpu, struct mm_struct *mm,
@@ -579,7 +615,7 @@ static int ept_check_page_mapped(struct vmx_vcpu *vcpu, struct mm_struct *mm,
  * @mm: the process's mm_struct
  * @addr: the address of the page
  * @flush: if true, clear the A bit
- * 
+ *
  * Returns 1 if the page was accessed, 0 otherwise
  */
 static int ept_check_page_accessed(struct vmx_vcpu *vcpu, struct mm_struct *mm,
