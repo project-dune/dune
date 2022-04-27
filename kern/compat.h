@@ -35,11 +35,6 @@
 #define FEATURE_CONTROL_VMXON_ENABLED_INSIDE_SMX FEAT_CTL_VMX_ENABLED_INSIDE_SMX
 #define MSR_IA32_FEATURE_CONTROL				 MSR_IA32_FEAT_CTL
 
-static inline void native_store_idt(struct desc_ptr *dtr)
-{
-	asm volatile("sidt %0" : "=m"(*dtr));
-}
-
 #define __addr_ok(addr) ((unsigned long __force)(addr) < user_addr_max())
 #define mmap_sem		mmap_lock
 

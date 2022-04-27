@@ -509,7 +509,7 @@ static void vmx_setup_constant_host_state(void)
 	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS); /* 22.2.4 */
 	vmcs_write16(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8); /* 22.2.4 */
 
-	native_store_idt(&dt);
+	store_idt(&dt);
 	vmcs_writel(HOST_IDTR_BASE, dt.address); /* 22.2.4 */
 
 	asm("mov $.Lkvm_vmx_return, %0" : "=r"(tmpl));
@@ -763,7 +763,7 @@ static u64 construct_eptp(unsigned long root_hpa)
 	u64 eptp;
 
 	/* TODO write the value reading from MSR */
-	eptp = VMX_EPT_DEFAULT_MT | VMX_EPT_DEFAULT_GAW << VMX_EPT_GAW_EPTP_SHIFT;
+	eptp = VMX_EPTP_MT_WB | VMX_EPTP_PWL_4;
 	if (cpu_has_vmx_ept_ad_bits())
 		eptp |= VMX_EPT_AD_ENABLE_BIT;
 	eptp |= (root_hpa & PAGE_MASK);
