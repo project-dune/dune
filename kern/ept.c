@@ -541,6 +541,8 @@ int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
 	pr_debug("ept: GPA: 0x%lx, GVA: 0x%lx, HVA: 0x%lx, flags: %x\n", gpa, gva,
 			 hva, fault_flags);
 
+	// TODO: do we need to check if the user has write permissions to this page
+	// before mapping it into the EPT? Investigate the security of this.
 	ret = ept_set_epte(vcpu, make_write, gpa, hva);
 
 	return ret;
