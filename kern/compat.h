@@ -3,6 +3,47 @@
 
 #include <linux/version.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+#define ASM_VMX_VMCLEAR_RAX     ".byte 0x66, 0x0f, 0xc7, 0x30"
+#define ASM_VMX_VMLAUNCH        ".byte 0x0f, 0x01, 0xc2"
+#define ASM_VMX_VMRESUME        ".byte 0x0f, 0x01, 0xc3"
+#define ASM_VMX_VMPTRLD_RAX     ".byte 0x0f, 0xc7, 0x30"
+#define ASM_VMX_VMREAD_RDX_RAX  ".byte 0x0f, 0x78, 0xd0"
+#define ASM_VMX_VMWRITE_RAX_RDX ".byte 0x0f, 0x79, 0xd0"
+#define ASM_VMX_VMWRITE_RSP_RDX ".byte 0x0f, 0x79, 0xd4"
+#define ASM_VMX_VMXOFF          ".byte 0x0f, 0x01, 0xc4"
+#define ASM_VMX_VMXON_RAX       ".byte 0xf3, 0x0f, 0xc7, 0x30"
+#define ASM_VMX_INVEPT          ".byte 0x66, 0x0f, 0x38, 0x80, 0x08"
+#define ASM_VMX_INVVPID         ".byte 0x66, 0x0f, 0x38, 0x81, 0x08"
+
+#define VMX_EPT_DEFAULT_MT     VMX_EPTP_MT_WB
+#define VMX_EPT_DEFAULT_GAW    3
+#define VMX_EPT_GAW_EPTP_SHIFT 3
+
+#define SECONDARY_EXEC_RDTSCP          SECONDARY_EXEC_ENABLE_RDTSCP
+#define VMX_EPT_AD_ENABLE_BIT          VMX_EPTP_AD_ENABLE_BIT
+#define VMX_EPT_EXTENT_INDIVIDUAL_ADDR 0
+
+#define read_cr3                       __read_cr3
+
+#define CPU_BASED_USE_TSC_OFFSETING               CPU_BASED_USE_TSC_OFFSETTING
+#define FEATURE_CONTROL_LOCKED                    FEAT_CTL_LOCKED
+#define FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX FEAT_CTL_VMX_ENABLED_OUTSIDE_SMX
+#define FEATURE_CONTROL_VMXON_ENABLED_INSIDE_SMX  FEAT_CTL_VMX_ENABLED_INSIDE_SMX
+#define MSR_IA32_FEATURE_CONTROL                  MSR_IA32_FEAT_CTL
+
+static inline void native_store_idt(struct desc_ptr *dtr)
+{
+    asm volatile("sidt %0" : "=m"(*dtr));
+}
+
+#define __addr_ok(addr) ((unsigned long __force)(addr) < user_addr_max())
+
+typedef struct ldttss_desc ldttss_desc_t;
+#else
+typedef struct ldttss_desc64 ldttss_desc_t;
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 #include <asm/fpu/api.h>
 #else
@@ -118,7 +159,14 @@ static inline void cr4_clear_bits(unsigned long mask)
 }
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+static inline void compat_fpu_restore(void)
+{
+    // TODO: fpu_restore
+    // if (!current->thread.fpu.fpregs_active)
+    //     fpu__restore(&current->thread.fpu);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 static inline void compat_fpu_restore(void)
 {
 	if (!current->thread.fpu.fpregs_active)

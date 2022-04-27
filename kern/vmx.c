@@ -582,7 +582,7 @@ static unsigned long segment_base(u16 selector)
 	v = get_desc_base(d);
 #ifdef CONFIG_X86_64
        if (d->s == 0 && (d->type == 2 || d->type == 9 || d->type == 11))
-               v |= ((unsigned long)((struct ldttss_desc64 *)d)->base3) << 32;
+               v |= ((unsigned long)((ldttss_desc_t *)d)->base3) << 32;
 #endif
 	return v;
 }
@@ -1842,11 +1842,7 @@ __init int vmx_init(void)
 	}
 
 	atomic_set(&vmx_enable_failed, 0);
-	if (on_each_cpu(vmx_enable, NULL, 1)) {
-		printk(KERN_ERR "vmx: timeout waiting for VMX mode enable.\n");
-		r = -EIO;
-		goto failed1; /* sadly we can't totally recover */
-	}
+	on_each_cpu(vmx_enable, NULL, 1);
 
 	if (atomic_read(&vmx_enable_failed)) {
 		r = -EBUSY;
@@ -1857,7 +1853,6 @@ __init int vmx_init(void)
 
 failed2:
 	on_each_cpu(vmx_disable, NULL, 1);
-failed1:
 	vmx_free_vmxon_areas();
 	return r;
 }
