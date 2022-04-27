@@ -24,10 +24,9 @@ KMISC := /lib/modules/$(KVER)/kernel/drivers/misc
 KMISC_INC := /lib/modules/$(KVER)/include
 
 SYSCALL_TBL = 0x$(shell $(EXTRACT) sys_call_table)
-DO_FORK = 0x$(shell $(EXTRACT) do_fork)
-_DO_FORK = 0x$(shell $(EXTRACT) _do_fork)
+KERNEL_CLONE = 0x$(shell $(EXTRACT) kernel_clone)
 
-CFLAGS_vmx.o = -DSYSCALL_TBL=$(SYSCALL_TBL) -DDO_FORK=$(DO_FORK) -D_DO_FORK=$(_DO_FORK)
+CFLAGS_vmx.o = -DSYSCALL_TBL=$(SYSCALL_TBL) -DKERNEL_CLONE=$(KERNEL_CLONE)
 
 # KSRC_OUTPUT should be overridden if you are using a 2.6 kernel that
 # has it's output sent elsewhere via KBUILD_OUTPUT= or O=

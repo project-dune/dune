@@ -89,7 +89,39 @@ static inline struct page *alloc_pages_exact_node(int nid, gfp_t gfp_mask,
 #endif
 
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) & defined(_DO_FORK)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0) & defined(KERNEL_CLONE)
+typedef long (*kernel_clone_fn)(struct kernel_clone_args *);
+static kernel_clone_fn __kernel_clone = (kernel_clone_fn)KERNEL_CLONE;
+static inline long dune_do_fork(unsigned long clone_flags,
+                                unsigned long stack_start, struct pt_regs *regs,
+                                unsigned long stack_size,
+                                int __user *parent_tidptr,
+                                int __user *child_tidptr, unsigned long tls)
+{
+    struct pt_regs tmp;
+    struct kernel_clone_args args;
+    struct pt_regs *me = current_pt_regs();
+    long ret;
+
+    memcpy(&tmp, me, sizeof(struct pt_regs));
+    memcpy(me, regs, sizeof(struct pt_regs));
+
+    args = (struct kernel_clone_args){
+        .flags = (lower_32_bits(clone_flags) & ~CSIGNAL),
+        .child_tid = child_tidptr,
+        .parent_tid = parent_tidptr,
+        .stack = stack_start,
+        .stack_size = stack_size,
+        .tls = tls,
+        .exit_signal = (lower_32_bits(clone_flags) & CSIGNAL),
+    };
+
+    ret = __kernel_clone(&args);
+
+    memcpy(me, &tmp, sizeof(struct pt_regs));
+    return ret;
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) & defined(_DO_FORK)
 typedef long (*do_fork_hack) (unsigned long, unsigned long, unsigned long,
                               int __user *, int __user *, unsigned long);
 static do_fork_hack __dune_do_fork = (do_fork_hack) _DO_FORK;
