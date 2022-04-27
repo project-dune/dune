@@ -1,6 +1,7 @@
 #include <linux/uaccess.h>
 #include <linux/user-return-notifier.h>
 
+#include "compat.h"
 #include "dune.h"
 
 static struct dune_trap_config trap_conf;

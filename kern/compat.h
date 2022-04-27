@@ -5,6 +5,7 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
 #include <asm/io.h>
+#include <linux/sched/task_stack.h>
 
 #define ASM_VMX_VMCLEAR_RAX     ".byte 0x66, 0x0f, 0xc7, 0x30"
 #define ASM_VMX_VMLAUNCH        ".byte 0x0f, 0x01, 0xc2"
