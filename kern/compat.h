@@ -215,7 +215,14 @@ static inline void compat_fpu_restore(void)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,18,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+#define _PAGE_CACHE_MODE_WB _PAGE_CACHE_MODE_WB
+#define _PAGE_CACHE_MODE_WC _PAGE_CACHE_MODE_WC
+static inline long pgprot2cachemode(pgprot_t pgprot)
+{
+    return pgprot_val(pgprot) & _PAGE_CACHE_MASK;
+}
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3,18,0)
 #define _PAGE_CACHE_MODE_WB _PAGE_CACHE_WB
 #define _PAGE_CACHE_MODE_WC _PAGE_CACHE_WC
 static inline long pgprot2cachemode(pgprot_t pgprot)
