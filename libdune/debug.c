@@ -12,10 +12,11 @@ static struct dune_trap_regs trap_regs;
 
 extern int dune_fd;
 
-static void dune_trap_enable(__u64 trigger_rip, __u8 delay, dune_trap_notify_func func, void *priv)
+static void dune_trap_enable(__u64 trigger_rip, __u8 delay,
+							 dune_trap_notify_func func, void *priv)
 {
 	struct dune_trap_config trap_conf = {
-		.trigger_rip = (__u64) trigger_rip,
+		.trigger_rip = (__u64)trigger_rip,
 		.delay = delay,
 		.notify_func = func,
 		.regs = &trap_regs,
@@ -33,7 +34,7 @@ static void dune_trap_disable()
 
 static void notify_on_resume(struct dune_trap_regs *regs, void *priv)
 {
-	struct dune_config *dune_conf = (struct dune_config *) priv;
+	struct dune_config *dune_conf = (struct dune_config *)priv;
 
 	/* We don't need the preemption trap anymore. */
 	dune_trap_disable();

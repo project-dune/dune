@@ -16,7 +16,7 @@ static dune_intr_cb intr_cbs[IDT_ENTRIES];
 static inline unsigned long read_cr2(void)
 {
 	unsigned long val;
-	asm volatile("mov %%cr2, %0\n\t" : "=r" (val));
+	asm volatile("mov %%cr2, %0\n\t" : "=r"(val));
 	return val;
 }
 
@@ -64,7 +64,7 @@ static bool addr_is_mapped(void *va)
 static void dune_dump_stack(struct dune_tf *tf)
 {
 	int i;
-	unsigned long *sp = (unsigned long *) tf->rsp;
+	unsigned long *sp = (unsigned long *)tf->rsp;
 
 	// we use dune_printf() because this might
 	// have to work even if libc doesn't.
@@ -74,8 +74,7 @@ static void dune_dump_stack(struct dune_tf *tf)
 			dune_printf("dune: reached unmapped addr\n");
 			break;
 		}
-		dune_printf("dune: RSP%+-3d 0x%016lx\n", i * sizeof(long),
-			   sp[i]);
+		dune_printf("dune: RSP%+-3d 0x%016lx\n", i * sizeof(long), sp[i]);
 	}
 }
 
@@ -91,7 +90,7 @@ static void dune_hexdump(void *x, int len)
 
 static void dump_ip(struct dune_tf *tf)
 {
-	unsigned char *p = (void*) tf->rip;
+	unsigned char *p = (void *)tf->rip;
 	int len = 20;
 
 	dune_printf("dune: code before IP\t");
@@ -145,8 +144,7 @@ void dune_trap_handler(int num, struct dune_tf *tf)
 		if (pgflt_cb) {
 			pgflt_cb(read_cr2(), tf->err, tf);
 		} else {
-			dune_printf("unhandled page fault %lx %lx\n",
-				   read_cr2(), tf->err);
+			dune_printf("unhandled page fault %lx %lx\n", read_cr2(), tf->err);
 			dune_dump_trap_frame(tf);
 			dune_procmap_dump();
 			dune_die();
@@ -156,8 +154,7 @@ void dune_trap_handler(int num, struct dune_tf *tf)
 	case T_NMI:
 	case T_DBLFLT:
 	case T_GPFLT:
-		dune_printf("fatal exception %d, code %lx - dying...\n",
-			   num, tf->err);
+		dune_printf("fatal exception %d, code %lx - dying...\n", num, tf->err);
 		dune_dump_trap_frame(tf);
 		dune_die();
 		break;

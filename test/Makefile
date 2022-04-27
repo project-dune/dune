@@ -32,3 +32,6 @@ clean:
 	make -C $(MODULE_LIB) M=$(PWD) clean
 
 -include *.d
+
+format:
+	clang-format -i $(wildcard *.[ch])

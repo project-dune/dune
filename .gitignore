@@ -19,10 +19,12 @@ eglibc-2.14/
 kern/Module.symvers
 kern/dune.ko
 kern/dune.mod.c
+kern/dune.mod
 kern/modules.order
 kern/tmp/
 test/hello
 test/test
 test/test_sandbox
 test/timetest
+test/hugepages
 tags

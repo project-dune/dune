@@ -94,10 +94,9 @@ void dune_procmap_iterate(dune_procmap_cb cb)
 		path[0] = '\0';
 		if (fgets(line, 512, map) == NULL)
 			break;
-		sscanf((char *)&line, "%lx-%lx %c%c%c%c %lx %x:%x %d %s",
-			  &e.begin, &e.end,
-			  &read, &write, &execute, &private, &e.offset,
-			  &dev1, &dev2, &inode, path);
+		sscanf((char *)&line, "%lx-%lx %c%c%c%c %lx %x:%x %d %s", &e.begin,
+			   &e.end, &read, &write, &execute, &private, &e.offset, &dev1,
+			   &dev2, &inode, path);
 		e.r = (read == 'r');
 		e.w = (write == 'w');
 		e.x = (execute == 'x');
@@ -111,14 +110,9 @@ void dune_procmap_iterate(dune_procmap_cb cb)
 
 static void __dune_procmap_dump_helper(const struct dune_procmap_entry *e)
 {
-	printf("0x%016lx-0x%016lx %c%c%c%c %08lx %s\n",
-			   e->begin, e->end,
-			   e->r ? 'R' : '-',
-			   e->w ? 'W' : '-',
-			   e->x ? 'X' : '-',
-			   e->p ? 'P' : 'S',
-			   e->offset,
-			   e->path);
+	printf("0x%016lx-0x%016lx %c%c%c%c %08lx %s\n", e->begin, e->end,
+		   e->r ? 'R' : '-', e->w ? 'W' : '-', e->x ? 'X' : '-',
+		   e->p ? 'P' : 'S', e->offset, e->path);
 }
 
 void dune_procmap_dump()
@@ -126,4 +120,3 @@ void dune_procmap_dump()
 	printf("--- Process Map Dump ---\n");
 	dune_procmap_iterate(&__dune_procmap_dump_helper);
 }
-

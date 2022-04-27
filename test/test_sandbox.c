@@ -8,7 +8,7 @@
 #include <asm/prctl.h>
 #include <sys/prctl.h>
 
-#define NUM_THREADS	10
+#define NUM_THREADS 10
 
 extern int arch_prctl(int code, unsigned long *addr);
 
@@ -78,7 +78,7 @@ static void *thread_pthread_fork(void *arg)
 
 	_threads_survived++;
 
-        if (arch_prctl(ARCH_GET_FS, &tls) == -1)
+	if (arch_prctl(ARCH_GET_FS, &tls) == -1)
 		err(1, "arch_prctl()");
 
 	if (tls == _tls) {
@@ -93,7 +93,7 @@ static void *thread_pthread_fork(void *arg)
 
 	if (pid == 0) {
 		_threads_survived++;
-		
+
 		tls = 0;
 		if (arch_prctl(ARCH_GET_FS, &tls) == -1)
 			err(1, "arch_prctl()");

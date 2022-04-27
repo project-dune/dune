@@ -10,9 +10,9 @@
 
 #include "dune.h"
 
-#define PDADDR(n, i)	(((unsigned long) (i)) << PDSHIFT(n))
-#define PTE_DEF_FLAGS	(PTE_P | PTE_W | PTE_U)
-#define LGPGSIZE	(1 << (PGSHIFT + NPTBITS))
+#define PDADDR(n, i)  (((unsigned long)(i)) << PDSHIFT(n))
+#define PTE_DEF_FLAGS (PTE_P | PTE_W | PTE_U)
+#define LGPGSIZE	  (1 << (PGSHIFT + NPTBITS))
 
 static inline int pte_present(ptent_t pte)
 {
@@ -24,16 +24,16 @@ static inline int pte_big(ptent_t pte)
 	return (PTE_FLAGS(pte) & PTE_PS);
 }
 
-static inline void * alloc_page(void)
+static inline void *alloc_page(void)
 {
 	struct page *pg = dune_page_alloc();
 	if (!pg)
 		return NULL;
 
-	return (void *) dune_page2pa(pg);
+	return (void *)dune_page2pa(pg);
 }
 
-static inline void put_page(void * page)
+static inline void put_page(void *page)
 {
 	// XXX: Using PA == VA
 	struct page *pg = dune_pa2page((physaddr_t)page);
@@ -42,15 +42,14 @@ static inline void put_page(void * page)
 }
 
 int __dune_vm_page_walk(ptent_t *dir, void *start_va, void *end_va,
-			page_walk_cb cb, const void *arg, int level,
-			int create)
+						page_walk_cb cb, const void *arg, int level, int create)
 {
 	// XXX: Using PA == VA
 	int i, ret;
 	int start_idx = PDX(level, start_va);
 	int end_idx = PDX(level, end_va);
-	void *base_va = (void *) ((unsigned long)
-			start_va & ~(PDADDR(level + 1, 1) - 1));
+	void *base_va =
+		(void *)((unsigned long)start_va & ~(PDADDR(level + 1, 1) - 1));
 
 	assert(level >= 0 && level <= NPTLVLS);
 	assert(end_idx < NPTENTRIES);
@@ -92,7 +91,7 @@ int __dune_vm_page_walk(ptent_t *dir, void *start_va, void *end_va,
 
 			if (!create)
 				continue;
-			
+
 			new_pte = alloc_page();
 			if (!new_pte)
 				return -ENOMEM;
@@ -103,9 +102,8 @@ int __dune_vm_page_walk(ptent_t *dir, void *start_va, void *end_va,
 		n_start_va = (i == start_idx) ? start_va : cur_va;
 		n_end_va = (i == end_idx) ? end_va : cur_va + PDADDR(level, 1) - 1;
 
-		ret = __dune_vm_page_walk((ptent_t *) PTE_ADDR(dir[i]),
-					 n_start_va, n_end_va, cb, arg,
-					 level - 1, create);
+		ret = __dune_vm_page_walk((ptent_t *)PTE_ADDR(dir[i]), n_start_va,
+								  n_end_va, cb, arg, level - 1, create);
 		if (ret)
 			return ret;
 	}
@@ -114,12 +112,12 @@ int __dune_vm_page_walk(ptent_t *dir, void *start_va, void *end_va,
 }
 
 int dune_vm_page_walk(ptent_t *root, void *start_va, void *end_va,
-		     page_walk_cb cb, const void *arg)
+					  page_walk_cb cb, const void *arg)
 {
 	return __dune_vm_page_walk(root, start_va, end_va, cb, arg, 3, CREATE_NONE);
 }
 
- int dune_vm_lookup(ptent_t *root, void *va, int create, ptent_t **pte_out)
+int dune_vm_lookup(ptent_t *root, void *va, int create, ptent_t **pte_out)
 {
 	// XXX: Using PA == VA
 	int i, j, k, l;
@@ -137,9 +135,9 @@ int dune_vm_page_walk(ptent_t *root, void *start_va, void *end_va,
 		pdpte = alloc_page();
 		memset(pdpte, 0, PGSIZE);
 
-                pml4[i] = PTE_ADDR(pdpte) | PTE_DEF_FLAGS;
+		pml4[i] = PTE_ADDR(pdpte) | PTE_DEF_FLAGS;
 	} else
-		pdpte = (ptent_t*) PTE_ADDR(pml4[i]);
+		pdpte = (ptent_t *)PTE_ADDR(pml4[i]);
 
 	if (!pte_present(pdpte[j])) {
 		if (!create)
@@ -153,7 +151,7 @@ int dune_vm_page_walk(ptent_t *root, void *start_va, void *end_va,
 		*pte_out = &pdpte[j];
 		return 0;
 	} else
-		pde = (ptent_t*) PTE_ADDR(pdpte[j]);
+		pde = (ptent_t *)PTE_ADDR(pdpte[j]);
 
 	if (!pte_present(pde[k])) {
 		if (!create)
@@ -167,7 +165,7 @@ int dune_vm_page_walk(ptent_t *root, void *start_va, void *end_va,
 		*pte_out = &pde[k];
 		return 0;
 	} else
-		pte = (ptent_t*) PTE_ADDR(pde[k]);
+		pte = (ptent_t *)PTE_ADDR(pde[k]);
 
 	*pte_out = &pte[l];
 	return 0;
@@ -203,10 +201,10 @@ static inline ptent_t get_pte_perm(int perm)
 
 static int __dune_vm_mprotect_helper(const void *arg, ptent_t *pte, void *va)
 {
-	ptent_t perm = (ptent_t) arg;
+	ptent_t perm = (ptent_t)arg;
 
-//	if (!(PTE_FLAGS(*pte) & PTE_P))
-//		return -ENOMEM;
+	//	if (!(PTE_FLAGS(*pte) & PTE_P))
+	//		return -ENOMEM;
 
 	*pte = PTE_ADDR(*pte) | (PTE_FLAGS(*pte) & PTE_PS) | perm;
 	return 0;
@@ -225,9 +223,9 @@ int dune_vm_mprotect(ptent_t *root, void *va, size_t len, int perm)
 
 	pte_perm = get_pte_perm(perm);
 
-	ret = __dune_vm_page_walk(root, va, va + len - 1,
-				 &__dune_vm_mprotect_helper,
-				 (void *) pte_perm, 3, CREATE_NONE);
+	ret =
+		__dune_vm_page_walk(root, va, va + len - 1, &__dune_vm_mprotect_helper,
+							(void *)pte_perm, 3, CREATE_NONE);
 	if (ret)
 		return ret;
 
@@ -244,7 +242,7 @@ struct map_phys_data {
 
 static int __dune_vm_map_phys_helper(const void *arg, ptent_t *pte, void *va)
 {
-	struct map_phys_data *data = (struct map_phys_data *) arg;
+	struct map_phys_data *data = (struct map_phys_data *)arg;
 
 	*pte = PTE_ADDR(va - data->va_base + data->pa_base) | data->perm;
 	return 0;
@@ -256,12 +254,12 @@ int dune_vm_map_phys(ptent_t *root, void *va, size_t len, void *pa, int perm)
 	struct map_phys_data data;
 	int create;
 
-//	if (!(perm & PERM_R) && (perm & ~(PERM_R)))
-//		return -EINVAL;
+	//	if (!(perm & PERM_R) && (perm & ~(PERM_R)))
+	//		return -EINVAL;
 
 	data.perm = get_pte_perm(perm);
-	data.va_base = (unsigned long) va;
-	data.pa_base = (unsigned long) pa;
+	data.va_base = (unsigned long)va;
+	data.pa_base = (unsigned long)pa;
 
 	if (perm & PERM_BIG)
 		create = CREATE_BIG;
@@ -270,10 +268,9 @@ int dune_vm_map_phys(ptent_t *root, void *va, size_t len, void *pa, int perm)
 	else
 		create = CREATE_NORMAL;
 
-	ret = __dune_vm_page_walk(root, va, va + len - 1,
-				 &__dune_vm_map_phys_helper,
-				 (void *) &data, 3,
-				 create);
+	ret =
+		__dune_vm_page_walk(root, va, va + len - 1, &__dune_vm_map_phys_helper,
+							(void *)&data, 3, create);
 	if (ret)
 		return ret;
 
@@ -282,7 +279,7 @@ int dune_vm_map_phys(ptent_t *root, void *va, size_t len, void *pa, int perm)
 
 static int __dune_vm_map_pages_helper(const void *arg, ptent_t *pte, void *va)
 {
-	ptent_t perm = (ptent_t) arg;
+	ptent_t perm = (ptent_t)arg;
 	struct page *pg = dune_page_alloc();
 
 	if (!pg)
@@ -303,29 +300,29 @@ int dune_vm_map_pages(ptent_t *root, void *va, size_t len, int perm)
 
 	pte_perm = get_pte_perm(perm);
 
-	ret = __dune_vm_page_walk(root, va, va + len - 1,
-				 &__dune_vm_map_pages_helper,
-				 (void *) pte_perm, 3, CREATE_NORMAL);
+	ret =
+		__dune_vm_page_walk(root, va, va + len - 1, &__dune_vm_map_pages_helper,
+							(void *)pte_perm, 3, CREATE_NORMAL);
 
 	return ret;
 }
 
 static int __dune_vm_clone_helper(const void *arg, ptent_t *pte, void *va)
 {
-       int ret;
-       struct page *pg = dune_pa2page(PTE_ADDR(*pte));
-       ptent_t *newRoot = (ptent_t *)arg;
-       ptent_t *newPte;
+	int ret;
+	struct page *pg = dune_pa2page(PTE_ADDR(*pte));
+	ptent_t *newRoot = (ptent_t *)arg;
+	ptent_t *newPte;
 
-       ret = dune_vm_lookup(newRoot, va, CREATE_NORMAL, &newPte);
-       if (ret < 0)
-               return ret;
+	ret = dune_vm_lookup(newRoot, va, CREATE_NORMAL, &newPte);
+	if (ret < 0)
+		return ret;
 
-       if (dune_page_isfrompool(PTE_ADDR(*pte)))
-               dune_page_get(pg);
-       *newPte = *pte;
+	if (dune_page_isfrompool(PTE_ADDR(*pte)))
+		dune_page_get(pg);
+	*newPte = *pte;
 
-       return 0;
+	return 0;
 }
 
 /**
@@ -333,21 +330,20 @@ static int __dune_vm_clone_helper(const void *arg, ptent_t *pte, void *va)
  */
 ptent_t *dune_vm_clone(ptent_t *root)
 {
-       int ret;
-       ptent_t *newRoot;
+	int ret;
+	ptent_t *newRoot;
 
-       newRoot = alloc_page();
-       memset(newRoot, 0, PGSIZE);
+	newRoot = alloc_page();
+	memset(newRoot, 0, PGSIZE);
 
-       ret = __dune_vm_page_walk(root, VA_START, VA_END,
-                       &__dune_vm_clone_helper, newRoot,
-                       3, CREATE_NONE);
-       if (ret < 0) {
-               dune_vm_free(newRoot);
-               return NULL;
-       }
+	ret = __dune_vm_page_walk(root, VA_START, VA_END, &__dune_vm_clone_helper,
+							  newRoot, 3, CREATE_NONE);
+	if (ret < 0) {
+		dune_vm_free(newRoot);
+		return NULL;
+	}
 
-       return newRoot;
+	return newRoot;
 }
 
 static int __dune_vm_free_helper(const void *arg, ptent_t *pte, void *va)
@@ -374,13 +370,11 @@ void dune_vm_free(ptent_t *root)
 			&__dune_vm_free_helper, NULL,
 			3, CREATE_NONE);*/
 
-	__dune_vm_page_walk(root, VA_START, VA_END,
-			&__dune_vm_free_helper, NULL,
-			2, CREATE_NONE);
+	__dune_vm_page_walk(root, VA_START, VA_END, &__dune_vm_free_helper, NULL, 2,
+						CREATE_NONE);
 
-	__dune_vm_page_walk(root, VA_START, VA_END,
-			&__dune_vm_free_helper, NULL,
-			1, CREATE_NONE);
+	__dune_vm_page_walk(root, VA_START, VA_END, &__dune_vm_free_helper, NULL, 1,
+						CREATE_NONE);
 
 	put_page(root);
 
@@ -390,15 +384,13 @@ void dune_vm_free(ptent_t *root)
 void dune_vm_unmap(ptent_t *root, void *va, size_t len)
 {
 	/* FIXME: Doesn't free as much memory as it could */
-	__dune_vm_page_walk(root, va, va + len - 1,
-			&__dune_vm_free_helper, NULL,
-			3, CREATE_NONE);
+	__dune_vm_page_walk(root, va, va + len - 1, &__dune_vm_free_helper, NULL, 3,
+						CREATE_NONE);
 
 	dune_flush_tlb();
 }
 
-
- void dune_vm_default_pgflt_handler(uintptr_t addr, uint64_t fec)
+void dune_vm_default_pgflt_handler(uintptr_t addr, uint64_t fec)
 {
 	ptent_t *pte = NULL;
 	int rc;
@@ -408,7 +400,7 @@ void dune_vm_unmap(ptent_t *root, void *va, size_t len)
 	 */
 	assert(!(fec & (FEC_P | FEC_RSV)));
 
-	rc = dune_vm_lookup(pgroot, (void *) addr, 0, &pte);
+	rc = dune_vm_lookup(pgroot, (void *)addr, 0, &pte);
 	assert(rc == 0);
 
 	if ((fec & FEC_W) && (*pte & PTE_COW)) {
@@ -439,4 +431,3 @@ void dune_vm_unmap(ptent_t *root, void *va, size_t len)
 		dune_flush_tlb_one(addr);
 	}
 }
-

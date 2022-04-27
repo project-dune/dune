@@ -28,7 +28,10 @@
 #include "local.h"
 #include "debug.h"
 
-#define BUILD_ASSERT(cond) do { (void) sizeof(char [1 - 2*!(cond)]); } while(0)
+#define BUILD_ASSERT(cond)                                                     \
+	do {                                                                       \
+		(void)sizeof(char[1 - 2 * !(cond)]);                                   \
+	} while (0)
 
 ptent_t *pgroot;
 uintptr_t phys_limit;
@@ -64,35 +67,37 @@ struct dune_percpu {
 static __thread struct dune_percpu *lpercpu;
 
 struct dynsym {
-	char		*ds_name;
-	int		ds_idx;
-	int		ds_off;
-	struct dynsym	*ds_next;
+	char *ds_name;
+	int ds_idx;
+	int ds_off;
+	struct dynsym *ds_next;
 };
 
 unsigned long dune_get_user_fs(void)
 {
 	void *ptr;
-	asm("movq %%gs:%c[ufs_base], %0" : "=r"(ptr) :
-	    [ufs_base]"i"(offsetof(struct dune_percpu, ufs_base)) : "memory");
-	return (unsigned long) ptr;
+	asm("movq %%gs:%c[ufs_base], %0"
+		: "=r"(ptr)
+		: [ufs_base] "i"(offsetof(struct dune_percpu, ufs_base))
+		: "memory");
+	return (unsigned long)ptr;
 }
 
 void dune_set_user_fs(unsigned long fs_base)
 {
-	asm ("movq %0, %%gs:%c[ufs_base]" : : "r"(fs_base),
-	     [ufs_base]"i"(offsetof(struct dune_percpu, ufs_base)));
+	asm("movq %0, %%gs:%c[ufs_base]"
+		:
+		: "r"(fs_base), [ufs_base] "i"(offsetof(struct dune_percpu, ufs_base)));
 }
 
 static void map_ptr(void *p, int len)
 {
 	unsigned long page = PGADDR(p);
-	unsigned long page_end = PGADDR((char*) p + len);
+	unsigned long page_end = PGADDR((char *)p + len);
 	unsigned long l = (page_end - page) + PGSIZE;
-	void *pg = (void*) page;
+	void *pg = (void *)page;
 
-	dune_vm_map_phys(pgroot, pg, l, (void*) dune_va_to_pa(pg),
-			 PERM_R | PERM_W);
+	dune_vm_map_phys(pgroot, pg, l, (void *)dune_va_to_pa(pg), PERM_R | PERM_W);
 }
 
 static int setup_safe_stack(struct dune_percpu *percpu)
@@ -101,7 +106,7 @@ static int setup_safe_stack(struct dune_percpu *percpu)
 	char *safe_stack;
 
 	safe_stack = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
-                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+					  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
 	if (safe_stack == MAP_FAILED)
 		return -ENOMEM;
@@ -112,21 +117,21 @@ static int setup_safe_stack(struct dune_percpu *percpu)
 	percpu->tss.tss_iomb = offsetof(struct Tss, tss_iopb);
 
 	for (i = 1; i < 8; i++)
-		percpu->tss.tss_ist[i] = (uintptr_t) safe_stack;
+		percpu->tss.tss_ist[i] = (uintptr_t)safe_stack;
 
 	/* changed later on jump to G3 */
-	percpu->tss.tss_rsp[0] = (uintptr_t) safe_stack;
+	percpu->tss.tss_rsp[0] = (uintptr_t)safe_stack;
 
 	return 0;
 }
 
 static void setup_gdt(struct dune_percpu *percpu)
-{	
+{
 	memcpy(percpu->gdt, gdt_template, sizeof(uint64_t) * NR_GDT_ENTRIES);
 
-	percpu->gdt[GD_TSS >> 3] = (SEG_TSSA | SEG_P | SEG_A |
-				    SEG_BASELO(&percpu->tss) |
-				    SEG_LIM(sizeof(struct Tss) - 1));
+	percpu->gdt[GD_TSS >> 3] =
+		(SEG_TSSA | SEG_P | SEG_A | SEG_BASELO(&percpu->tss) |
+		 SEG_LIM(sizeof(struct Tss) - 1));
 	percpu->gdt[GD_TSS2 >> 3] = SEG_BASEHI(&percpu->tss);
 }
 
@@ -140,43 +145,48 @@ static int dune_boot(struct dune_percpu *percpu)
 
 	setup_gdt(percpu);
 
-	_gdtr.base  = (uint64_t) &percpu->gdt;
+	_gdtr.base = (uint64_t)&percpu->gdt;
 	_gdtr.limit = sizeof(percpu->gdt) - 1;
 
-	_idtr.base = (uint64_t) &idt;
+	_idtr.base = (uint64_t)&idt;
 	_idtr.limit = sizeof(idt) - 1;
 
-	asm volatile (
+	asm volatile(
 		// STEP 1: load the new GDT
 		"lgdt %0\n"
 
 		// STEP 2: initialize data segements
-		"mov $" __str(GD_KD) ", %%ax\n"
-		"mov %%ax, %%ds\n"
-		"mov %%ax, %%es\n"
-		"mov %%ax, %%ss\n"
+		"mov $" __str(
+			GD_KD) ", %%ax\n"
+				   "mov %%ax, %%ds\n"
+				   "mov %%ax, %%es\n"
+				   "mov %%ax, %%ss\n"
 
-		// STEP 3: long jump into the new code segment
-		"mov $" __str(GD_KT) ", %%rax\n"
-		"pushq %%rax\n"
-		"pushq $1f\n"
-		"lretq\n"
-		"1:\n"
-		"nop\n"
+				   // STEP 3: long jump into the new code segment
+				   "mov $" __str(
+					   GD_KT) ", %%rax\n"
+							  "pushq %%rax\n"
+							  "pushq $1f\n"
+							  "lretq\n"
+							  "1:\n"
+							  "nop\n"
 
-		// STEP 4: load the task register (for safe stack switching)
-		"mov $" __str(GD_TSS) ", %%ax\n"
-		"ltr %%ax\n"
+							  // STEP 4: load the task register (for safe stack switching)
+							  "mov $" __str(
+								  GD_TSS) ", %%ax\n"
+										  "ltr %%ax\n"
 
-		// STEP 5: load the new IDT and enable interrupts
-		"lidt %1\n"
-		"sti\n"
+										  // STEP 5: load the new IDT and enable interrupts
+										  "lidt %1\n"
+										  "sti\n"
 
-		: : "m" (_gdtr), "m" (_idtr) : "rax");
-	
+		:
+		: "m"(_gdtr), "m"(_idtr)
+		: "rax");
+
 	// STEP 6: FS and GS require special initialization on 64-bit
 	wrmsrl(MSR_FS_BASE, percpu->kfs_base);
-	wrmsrl(MSR_GS_BASE, (unsigned long) percpu);
+	wrmsrl(MSR_GS_BASE, (unsigned long)percpu);
 
 	return 0;
 }
@@ -184,10 +194,10 @@ static int dune_boot(struct dune_percpu *percpu)
 #define ISR_LEN 16
 
 static inline void set_idt_addr(struct idtd *id, physaddr_t addr)
-{       
-        id->low    = addr & 0xFFFF;
-        id->middle = (addr >> 16) & 0xFFFF;
-        id->high   = (addr >> 32) & 0xFFFFFFFF;
+{
+	id->low = addr & 0xFFFF;
+	id->middle = (addr >> 16) & 0xFFFF;
+	id->high = (addr >> 32) & 0xFFFFFFFF;
 }
 
 static void setup_idt(void)
@@ -196,13 +206,13 @@ static void setup_idt(void)
 
 	for (i = 0; i < IDT_ENTRIES; i++) {
 		struct idtd *id = &idt[i];
-		uintptr_t isr = (uintptr_t) &__dune_intr;
+		uintptr_t isr = (uintptr_t)&__dune_intr;
 
 		isr += ISR_LEN * i;
 		memset(id, 0, sizeof(*id));
-                
+
 		id->selector = GD_KT;
-		id->type     = IDTD_P | IDTD_TRAP_GATE;
+		id->type = IDTD_P | IDTD_TRAP_GATE;
 
 		switch (i) {
 		case T_BRKPT:
@@ -228,16 +238,15 @@ static int setup_syscall(void)
 	size_t off;
 	int i;
 
-	assert((unsigned long) __dune_syscall_end  -
-	       (unsigned long) __dune_syscall < PGSIZE);
+	assert((unsigned long)__dune_syscall_end - (unsigned long)__dune_syscall <
+		   PGSIZE);
 
 	lstar = ioctl(dune_fd, DUNE_GET_SYSCALL);
 	if (lstar == -1)
 		return -errno;
 
-	page = mmap((void *) NULL, PGSIZE * 2,
-		    PROT_READ | PROT_WRITE | PROT_EXEC,
-		    MAP_PRIVATE | MAP_ANON, -1, 0);
+	page = mmap((void *)NULL, PGSIZE * 2, PROT_READ | PROT_WRITE | PROT_EXEC,
+				MAP_PRIVATE | MAP_ANON, -1, 0);
 
 	if (page == MAP_FAILED)
 		return -errno;
@@ -245,16 +254,15 @@ static int setup_syscall(void)
 	lstara = lstar & ~(PGSIZE - 1);
 	off = lstar - lstara;
 
-	memcpy(page + off, __dune_syscall, 
-		(unsigned long) __dune_syscall_end -
-		(unsigned long) __dune_syscall);
+	memcpy(page + off, __dune_syscall,
+		   (unsigned long)__dune_syscall_end - (unsigned long)__dune_syscall);
 
 	for (i = 0; i <= PGSIZE; i += PGSIZE) {
 		uintptr_t pa = dune_mmap_addr_to_pa(page + i);
-		dune_vm_lookup(pgroot, (void *) (lstara + i), 1, &pte);
+		dune_vm_lookup(pgroot, (void *)(lstara + i), 1, &pte);
 		*pte = PTE_ADDR(pa) | PTE_P;
 	}
-	
+
 	return 0;
 }
 
@@ -264,7 +272,7 @@ static void setup_vsyscall(void)
 {
 	ptent_t *pte;
 
-	dune_vm_lookup(pgroot, (void *) VSYSCALL_ADDR, 1, &pte);
+	dune_vm_lookup(pgroot, (void *)VSYSCALL_ADDR, 1, &pte);
 	*pte = PTE_ADDR(dune_va_to_pa(&__dune_vsyscall_page)) | PTE_P | PTE_U;
 }
 
@@ -274,21 +282,25 @@ static void __setup_mappings_cb(const struct dune_procmap_entry *ent)
 	int ret;
 
 	// page region already mapped
-	if (ent->begin == (unsigned long) PAGEBASE)
+	if (ent->begin == (unsigned long)PAGEBASE)
 		return;
-	
-	if (ent->begin == (unsigned long) VSYSCALL_ADDR) {
+
+	if (ent->begin == (unsigned long)VSYSCALL_ADDR) {
 		setup_vsyscall();
 		return;
 	}
 
 	if (ent->type == PROCMAP_TYPE_VDSO) {
-		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R | PERM_X);
+		dune_vm_map_phys(pgroot, (void *)ent->begin, ent->end - ent->begin,
+						 (void *)dune_va_to_pa((void *)ent->begin),
+						 PERM_U | PERM_R | PERM_X);
 		return;
 	}
 
 	if (ent->type == PROCMAP_TYPE_VVAR) {
-		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R);
+		dune_vm_map_phys(pgroot, (void *)ent->begin, ent->end - ent->begin,
+						 (void *)dune_va_to_pa((void *)ent->begin),
+						 PERM_U | PERM_R);
 		return;
 	}
 
@@ -299,10 +311,8 @@ static void __setup_mappings_cb(const struct dune_procmap_entry *ent)
 	if (ent->x)
 		perm |= PERM_X;
 
-	ret = dune_vm_map_phys(pgroot, (void *) ent->begin,
-			      ent->end - ent->begin,
-			      (void *) dune_va_to_pa((void *) ent->begin),
-			      perm);
+	ret = dune_vm_map_phys(pgroot, (void *)ent->begin, ent->end - ent->begin,
+						   (void *)dune_va_to_pa((void *)ent->begin), perm);
 	assert(!ret);
 }
 
@@ -310,10 +320,9 @@ static int __setup_mappings_precise(void)
 {
 	int ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) PAGEBASE,
-			      MAX_PAGES * PGSIZE,
-			      (void *) dune_va_to_pa((void *) PAGEBASE),
-			      PERM_R | PERM_W | PERM_BIG);
+	ret = dune_vm_map_phys(pgroot, (void *)PAGEBASE, MAX_PAGES * PGSIZE,
+						   (void *)dune_va_to_pa((void *)PAGEBASE),
+						   PERM_R | PERM_W | PERM_BIG);
 	if (ret)
 		return ret;
 
@@ -325,12 +334,16 @@ static int __setup_mappings_precise(void)
 static void setup_vdso_cb(const struct dune_procmap_entry *ent)
 {
 	if (ent->type == PROCMAP_TYPE_VDSO) {
-		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R | PERM_X);
+		dune_vm_map_phys(pgroot, (void *)ent->begin, ent->end - ent->begin,
+						 (void *)dune_va_to_pa((void *)ent->begin),
+						 PERM_U | PERM_R | PERM_X);
 		return;
 	}
 
 	if (ent->type == PROCMAP_TYPE_VVAR) {
-		dune_vm_map_phys(pgroot, (void *) ent->begin, ent->end - ent->begin, (void *) dune_va_to_pa((void *) ent->begin), PERM_U | PERM_R);
+		dune_vm_map_phys(pgroot, (void *)ent->begin, ent->end - ent->begin,
+						 (void *)dune_va_to_pa((void *)ent->begin),
+						 PERM_U | PERM_R);
 		return;
 	}
 }
@@ -339,27 +352,28 @@ static int __setup_mappings_full(struct dune_layout *layout)
 {
 	int ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) 0, 1UL << 32,
-						(void *) 0,
-			      PERM_R | PERM_W | PERM_X | PERM_U);
+	ret = dune_vm_map_phys(pgroot, (void *)0, 1UL << 32, (void *)0,
+						   PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_map, GPA_MAP_SIZE,
-						(void *) dune_mmap_addr_to_pa((void *) layout->base_map),
-			      PERM_R | PERM_W | PERM_X | PERM_U);
+	ret =
+		dune_vm_map_phys(pgroot, (void *)layout->base_map, GPA_MAP_SIZE,
+						 (void *)dune_mmap_addr_to_pa((void *)layout->base_map),
+						 PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) layout->base_stack, GPA_STACK_SIZE,
-						(void *) dune_stack_addr_to_pa((void *) layout->base_stack),
-			      PERM_R | PERM_W | PERM_X | PERM_U);
+	ret = dune_vm_map_phys(
+		pgroot, (void *)layout->base_stack, GPA_STACK_SIZE,
+		(void *)dune_stack_addr_to_pa((void *)layout->base_stack),
+		PERM_R | PERM_W | PERM_X | PERM_U);
 	if (ret)
 		return ret;
 
-	ret = dune_vm_map_phys(pgroot, (void *) PAGEBASE, MAX_PAGES * PGSIZE,
-						(void *) dune_va_to_pa((void *) PAGEBASE),
-						PERM_R | PERM_W | PERM_BIG);
+	ret = dune_vm_map_phys(pgroot, (void *)PAGEBASE, MAX_PAGES * PGSIZE,
+						   (void *)dune_va_to_pa((void *)PAGEBASE),
+						   PERM_R | PERM_W | PERM_BIG);
 	if (ret)
 		return ret;
 
@@ -400,13 +414,13 @@ static struct dune_percpu *create_percpu(void)
 	}
 
 	percpu = mmap(NULL, PGSIZE, PROT_READ | PROT_WRITE,
-		      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+				  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (percpu == MAP_FAILED)
 		return NULL;
 
 	map_ptr(percpu, sizeof(*percpu));
 
-        percpu->kfs_base = fs_base;
+	percpu->kfs_base = fs_base;
 	percpu->ufs_base = fs_base;
 	percpu->in_usermode = 0;
 
@@ -428,10 +442,10 @@ static void map_stack_cb(const struct dune_procmap_entry *e)
 {
 	unsigned long esp;
 
-	asm ("mov %%rsp, %0" : "=r" (esp));
+	asm("mov %%rsp, %0" : "=r"(esp));
 
 	if (esp >= e->begin && esp < e->end)
-		map_ptr((void*) e->begin, e->end - e->begin);
+		map_ptr((void *)e->begin, e->end - e->begin);
 }
 
 static void map_stack(void)
@@ -449,9 +463,9 @@ static int do_dune_enter(struct dune_percpu *percpu)
 	conf = malloc(sizeof(struct dune_config));
 
 	conf->vcpu = 0;
-	conf->rip = (__u64) &__dune_ret;
+	conf->rip = (__u64)&__dune_ret;
 	conf->rsp = 0;
-	conf->cr3 = (physaddr_t) pgroot;
+	conf->cr3 = (physaddr_t)pgroot;
 	conf->rflags = 0x2;
 
 	/* NOTE: We don't setup the general purpose registers because __dune_ret
@@ -497,10 +511,12 @@ void on_dune_exit(struct dune_config *conf)
 		printf("dune: exit due to unhandled VM exit\n");
 		break;
 	case DUNE_RET_NOENTER:
-		printf("dune: re-entry to Dune mode failed, status is %lld\n", conf->status);
+		printf("dune: re-entry to Dune mode failed, status is %lld\n",
+			   conf->status);
 		break;
 	default:
-		printf("dune: unknown exit from Dune, ret=%lld, status=%lld\n", conf->ret, conf->status);
+		printf("dune: unknown exit from Dune, ret=%lld, status=%lld\n",
+			   conf->ret, conf->status);
 		break;
 	}
 
@@ -544,7 +560,7 @@ int dune_enter(void)
 int dune_enter_ex(void *percpu)
 {
 	int ret;
-	struct dune_percpu *pcpu = (struct dune_percpu *) percpu;
+	struct dune_percpu *pcpu = (struct dune_percpu *)percpu;
 	unsigned long fs_base;
 
 	if (arch_prctl(ARCH_GET_FS, &fs_base) == -1) {
@@ -552,7 +568,7 @@ int dune_enter_ex(void *percpu)
 		return -EIO;
 	}
 
-        pcpu->kfs_base = fs_base;
+	pcpu->kfs_base = fs_base;
 	pcpu->ufs_base = fs_base;
 	pcpu->in_usermode = 0;
 
@@ -668,4 +684,3 @@ fail_pgroot:
 fail_open:
 	return ret;
 }
-

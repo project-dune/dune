@@ -19,3 +19,6 @@ clean:
 	rm -f *.o test *.d $(bench_files)
 
 -include *.d
+
+format:
+	clang-format -i $(wildcard *.[ch])

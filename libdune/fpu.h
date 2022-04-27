@@ -13,8 +13,8 @@ struct fxsave_area {
 	uint64_t rdp;
 	uint32_t mxcsr;
 	uint32_t mxcsr_mask;
-	uint32_t st_regs[32];   // 8 128-bit FP registers
-	uint32_t xmm_regs[64];  // 16 128-bit XMM registers
+	uint32_t st_regs[32]; // 8 128-bit FP registers
+	uint32_t xmm_regs[64]; // 16 128-bit XMM registers
 	uint32_t padding[24];
 } __attribute__((packed));
 
@@ -25,15 +25,15 @@ struct xsave_header {
 } __attribute__((packed));
 
 struct xsave_area {
-	struct fxsave_area	fxsave;
-	struct xsave_header	header;
-	uint32_t		ymm_regs[64]; // extends XMM registers to 256-bit
+	struct fxsave_area fxsave;
+	struct xsave_header header;
+	uint32_t ymm_regs[64]; // extends XMM registers to 256-bit
 	/* FIXME: check CPUID, could be other extensions in the future */
-} __attribute__((packed, aligned (64)));
+} __attribute__((packed, aligned(64)));
 
 struct fpu_area {
 	/* we only support xsave, since it's available in nehalem and later */
-	struct xsave_area	xsave;
+	struct xsave_area xsave;
 };
 
 static inline void fpu_xsave(struct fpu_area *fp, uint64_t mask)
@@ -41,9 +41,10 @@ static inline void fpu_xsave(struct fpu_area *fp, uint64_t mask)
 	uint32_t lmask = mask;
 	uint32_t umask = mask >> 32;
 
-	asm volatile("xsaveq %0\n\t" : "=m"(fp->xsave) :
-		     "a"(lmask), "d"(umask) :
-		     "memory");
+	asm volatile("xsaveq %0\n\t"
+				 : "=m"(fp->xsave)
+				 : "a"(lmask), "d"(umask)
+				 : "memory");
 }
 
 static inline void fpu_xsaveopt(struct fpu_area *fp, uint64_t mask)
@@ -51,9 +52,10 @@ static inline void fpu_xsaveopt(struct fpu_area *fp, uint64_t mask)
 	uint32_t lmask = mask;
 	uint32_t umask = mask >> 32;
 
-	asm volatile("xsaveoptq %0\n\t" : "=m"(fp->xsave) :
-		     "a"(lmask), "d"(umask) :
-		     "memory");
+	asm volatile("xsaveoptq %0\n\t"
+				 : "=m"(fp->xsave)
+				 : "a"(lmask), "d"(umask)
+				 : "memory");
 }
 
 static inline void fpu_xrstor(struct fpu_area *fp, uint64_t mask)
@@ -61,9 +63,10 @@ static inline void fpu_xrstor(struct fpu_area *fp, uint64_t mask)
 	uint32_t lmask = mask;
 	uint32_t umask = mask >> 32;
 
-	asm volatile("xrstorq %0\n\t" : : "m"(fp->xsave),
-		     "a"(lmask), "d"(umask) :
-		     "memory");
+	asm volatile("xrstorq %0\n\t"
+				 :
+				 : "m"(fp->xsave), "a"(lmask), "d"(umask)
+				 : "memory");
 }
 
 /*

@@ -20,7 +20,7 @@ struct vmcs {
 struct vmx_capability {
 	u32 ept;
 	u32 vpid;
-	int has_load_efer:1;
+	int has_load_efer : 1;
 };
 
 extern struct vmx_capability vmx_capability;
@@ -62,7 +62,7 @@ struct vmx_vcpu {
 	unsigned long eptp;
 	bool ept_ad_enabled;
 
-	u8  fail;
+	u8 fail;
 	u64 exit_reason;
 	u64 host_rsp;
 	u64 regs[NR_VCPU_REGS];
@@ -93,18 +93,16 @@ extern int vmx_init_ept(struct vmx_vcpu *vcpu);
 extern int vmx_create_ept(struct vmx_vcpu *vcpu);
 extern void vmx_destroy_ept(struct vmx_vcpu *vcpu);
 
-extern int
-vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
-		 unsigned long gva, int fault_flags);
+extern int vmx_do_ept_fault(struct vmx_vcpu *vcpu, unsigned long gpa,
+							unsigned long gva, int fault_flags);
 
 extern void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu);
 extern void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa);
 
 static __always_inline unsigned long vmcs_readl(unsigned long field)
 {
-        unsigned long value;
+	unsigned long value;
 
-        asm volatile (ASM_VMX_VMREAD_RDX_RAX
-                      : "=a"(value) : "d"(field) : "cc");
-        return value;
+	asm volatile(ASM_VMX_VMREAD_RDX_RAX : "=a"(value) : "d"(field) : "cc");
+	return value;
 }

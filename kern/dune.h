@@ -13,12 +13,12 @@
  */
 
 /* FIXME: this must be reserved in miscdevice.h */
-#define DUNE_MINOR       233
+#define DUNE_MINOR 233
 
-#define DUNE_ENTER	_IOR(DUNE_MINOR, 0x01, struct dune_config)
-#define DUNE_GET_SYSCALL _IO(DUNE_MINOR, 0x02)
-#define DUNE_GET_LAYOUT	_IOW(DUNE_MINOR, 0x03, struct dune_layout)
-#define DUNE_TRAP_ENABLE _IOR(DUNE_MINOR, 0x04, struct dune_trap_config)
+#define DUNE_ENTER		  _IOR(DUNE_MINOR, 0x01, struct dune_config)
+#define DUNE_GET_SYSCALL  _IO(DUNE_MINOR, 0x02)
+#define DUNE_GET_LAYOUT	  _IOW(DUNE_MINOR, 0x03, struct dune_layout)
+#define DUNE_TRAP_ENABLE  _IOR(DUNE_MINOR, 0x04, struct dune_trap_config)
 #define DUNE_TRAP_DISABLE _IO(DUNE_MINOR, 0x05)
 
 // XXX: Must match libdune/dune.h
@@ -76,7 +76,7 @@ struct dune_trap_regs {
 	__u64 rflags;
 } __attribute__((packed));
 
-typedef void (* dune_trap_notify_func)(struct dune_trap_regs *, void *);
+typedef void (*dune_trap_notify_func)(struct dune_trap_regs *, void *);
 
 struct dune_trap_config {
 	__u64 trigger_rip;
@@ -87,40 +87,41 @@ struct dune_trap_config {
 	__u8 delay;
 } __attribute__((packed));
 
-#define GPA_STACK_SIZE ((unsigned long) 1 << 30) /* 1 gigabyte */
-#define GPA_MAP_SIZE   (((unsigned long) 1 << 36) - GPA_STACK_SIZE) /* 63 gigabytes */
+#define GPA_STACK_SIZE ((unsigned long)1 << 30) /* 1 gigabyte */
+#define GPA_MAP_SIZE                                                           \
+	(((unsigned long)1 << 36) - GPA_STACK_SIZE) /* 63 gigabytes */
 #define LG_ALIGN(addr) ((addr + (1 << 30) - 1) & ~((1 << 30) - 1))
 
 #endif /* __ASSEMBLY__ */
 
 #define IOCTL_DUNE_ENTER 0x80b0e901
 
-#define DUNE_CFG_RET 0x00
-#define DUNE_CFG_RAX 0x08
-#define DUNE_CFG_RBX 0x10
-#define DUNE_CFG_RCX 0x18
-#define DUNE_CFG_RDX 0x20
-#define DUNE_CFG_RSI 0x28
-#define DUNE_CFG_RDI 0x30
-#define DUNE_CFG_RSP 0x38
-#define DUNE_CFG_RBP 0x40
-#define DUNE_CFG_R8 0x48
-#define DUNE_CFG_R9 0x50
-#define DUNE_CFG_R10 0x58
-#define DUNE_CFG_R11 0x60
-#define DUNE_CFG_R12 0x68
-#define DUNE_CFG_R13 0x70
-#define DUNE_CFG_R14 0x78
-#define DUNE_CFG_R15 0x80
-#define DUNE_CFG_RIP 0x88
+#define DUNE_CFG_RET	0x00
+#define DUNE_CFG_RAX	0x08
+#define DUNE_CFG_RBX	0x10
+#define DUNE_CFG_RCX	0x18
+#define DUNE_CFG_RDX	0x20
+#define DUNE_CFG_RSI	0x28
+#define DUNE_CFG_RDI	0x30
+#define DUNE_CFG_RSP	0x38
+#define DUNE_CFG_RBP	0x40
+#define DUNE_CFG_R8		0x48
+#define DUNE_CFG_R9		0x50
+#define DUNE_CFG_R10	0x58
+#define DUNE_CFG_R11	0x60
+#define DUNE_CFG_R12	0x68
+#define DUNE_CFG_R13	0x70
+#define DUNE_CFG_R14	0x78
+#define DUNE_CFG_R15	0x80
+#define DUNE_CFG_RIP	0x88
 #define DUNE_CFG_RFLAGS 0x90
-#define DUNE_CFG_CR3 0x98
+#define DUNE_CFG_CR3	0x98
 #define DUNE_CFG_STATUS 0xa0
-#define DUNE_CFG_VCPU 0xa8
+#define DUNE_CFG_VCPU	0xa8
 
-#define DUNE_RET_EXIT 1
-#define DUNE_RET_EPT_VIOLATION 2
-#define DUNE_RET_INTERRUPT 3
-#define DUNE_RET_SIGNAL 4
+#define DUNE_RET_EXIT			  1
+#define DUNE_RET_EPT_VIOLATION	  2
+#define DUNE_RET_INTERRUPT		  3
+#define DUNE_RET_SIGNAL			  4
 #define DUNE_RET_UNHANDLED_VMEXIT 5
-#define DUNE_RET_NOENTER 6
+#define DUNE_RET_NOENTER		  6

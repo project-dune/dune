@@ -104,3 +104,5 @@ tags:
 	CTAGSF=`ctags --version | grep -i exuberant >/dev/null && echo "-I __initdata,__exitdata,EXPORT_SYMBOL,EXPORT_SYMBOL_NOVERS"`; \
 	$(all-sources) | xargs ctags $$CTAGSF -a
 
+format:
+	clang-format -i $(wildcard *.[ch])

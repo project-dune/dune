@@ -62,7 +62,7 @@ static void *test_pthread_thread(void *arg)
 	if (check_dune())
 		return NULL;
 
-	return (void*) 0x666;
+	return (void *)0x666;
 }
 
 static int test_pthread(void)
@@ -85,7 +85,7 @@ static int test_pthread(void)
 	if (pthread_join(pt, &ret))
 		return 4;
 
-	if (ret != (void*) 0x666)
+	if (ret != (void *)0x666)
 		return 5;
 
 	if (check_dune())
@@ -119,12 +119,12 @@ static int test_signal(void)
 	if (test_signal_glob != 666)
 		return 2;
 
-	return 255; 
+	return 255;
 }
 
 static struct test {
-	char	*name;
-	int	(*cb)(void);
+	char *name;
+	int (*cb)(void);
 } _tests[] = {
 	{ "fork", test_fork },
 	{ "pthread", test_pthread },
@@ -153,7 +153,7 @@ static void run_test(struct test *t)
 
 	rc = WEXITSTATUS(status);
 
-	printf("==== Test %s - %s", t->name, rc != 255 ? "FAILED" : "passed" );
+	printf("==== Test %s - %s", t->name, rc != 255 ? "FAILED" : "passed");
 
 	if (WIFSIGNALED(status))
 		printf(" [crashed]");

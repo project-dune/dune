@@ -71,7 +71,7 @@ static unsigned long *msr_bitmap;
 
 #define NUM_SYSCALLS 312
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,11,0)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3, 11, 0)
 typedef void (*sys_call_ptr_t)(void);
 #else
 #include <asm/syscall.h>
@@ -101,19 +101,17 @@ struct vmx_capability vmx_capability;
 static inline bool cpu_has_secondary_exec_ctrls(void)
 {
 	return vmcs_config.cpu_based_exec_ctrl &
-		CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+		   CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
 }
 
 static inline bool cpu_has_vmx_vpid(void)
 {
-	return vmcs_config.cpu_based_2nd_exec_ctrl &
-		SECONDARY_EXEC_ENABLE_VPID;
+	return vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_ENABLE_VPID;
 }
 
 static inline bool cpu_has_vmx_invpcid(void)
 {
-	return vmcs_config.cpu_based_2nd_exec_ctrl &
-		SECONDARY_EXEC_ENABLE_INVPCID;
+	return vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_ENABLE_INVPCID;
 }
 
 static inline bool cpu_has_vmx_invvpid_single(void)
@@ -128,8 +126,7 @@ static inline bool cpu_has_vmx_invvpid_global(void)
 
 static inline bool cpu_has_vmx_ept(void)
 {
-	return vmcs_config.cpu_based_2nd_exec_ctrl &
-		SECONDARY_EXEC_ENABLE_EPT;
+	return vmcs_config.cpu_based_2nd_exec_ctrl & SECONDARY_EXEC_ENABLE_EPT;
 }
 
 static inline bool cpu_has_vmx_invept_individual_addr(void)
@@ -156,12 +153,14 @@ static inline void __invept(int ext, u64 eptp, gpa_t gpa)
 {
 	struct {
 		u64 eptp, gpa;
-	} operand = {eptp, gpa};
+	} operand = { eptp, gpa };
 
-	asm volatile (ASM_VMX_INVEPT
-			/* CF==1 or ZF==1 --> rc = -1 */
-			"; ja 1f ; ud2 ; 1:\n"
-			: : "a" (&operand), "c" (ext) : "cc", "memory");
+	asm volatile(ASM_VMX_INVEPT
+				 /* CF==1 or ZF==1 --> rc = -1 */
+				 "; ja 1f ; ud2 ; 1:\n"
+				 :
+				 : "a"(&operand), "c"(ext)
+				 : "cc", "memory");
 }
 
 static inline void ept_sync_global(void)
@@ -181,36 +180,35 @@ static inline void ept_sync_context(u64 eptp)
 static inline void ept_sync_individual_addr(u64 eptp, gpa_t gpa)
 {
 	if (cpu_has_vmx_invept_individual_addr())
-		__invept(VMX_EPT_EXTENT_INDIVIDUAL_ADDR,
-				eptp, gpa);
+		__invept(VMX_EPT_EXTENT_INDIVIDUAL_ADDR, eptp, gpa);
 	else
 		ept_sync_context(eptp);
 }
 
 static inline void __vmxon(u64 addr)
 {
-	asm volatile (ASM_VMX_VMXON_RAX
-			: : "a"(&addr), "m"(addr)
-			: "memory", "cc");
+	asm volatile(ASM_VMX_VMXON_RAX : : "a"(&addr), "m"(addr) : "memory", "cc");
 }
 
 static inline void __vmxoff(void)
 {
-	asm volatile (ASM_VMX_VMXOFF : : : "cc");
+	asm volatile(ASM_VMX_VMXOFF : : : "cc");
 }
 
 static inline void __invvpid(int ext, u16 vpid, gva_t gva)
 {
-    struct {
-	u64 vpid : 16;
-	u64 rsvd : 48;
-	u64 gva;
-    } operand = { vpid, 0, gva };
+	struct {
+		u64 vpid : 16;
+		u64 rsvd : 48;
+		u64 gva;
+	} operand = { vpid, 0, gva };
 
-    asm volatile (ASM_VMX_INVVPID
-		  /* CF==1 or ZF==1 --> rc = -1 */
-		  "; ja 1f ; ud2 ; 1:"
-		  : : "a"(&operand), "c"(ext) : "cc", "memory");
+	asm volatile(ASM_VMX_INVVPID
+				 /* CF==1 or ZF==1 --> rc = -1 */
+				 "; ja 1f ; ud2 ; 1:"
+				 :
+				 : "a"(&operand), "c"(ext)
+				 : "cc", "memory");
 }
 
 static inline void vpid_sync_vcpu_single(u16 vpid)
@@ -241,12 +239,12 @@ static void vmcs_clear(struct vmcs *vmcs)
 	u64 phys_addr = __pa(vmcs);
 	u8 error;
 
-	asm volatile (ASM_VMX_VMCLEAR_RAX "; setna %0"
-		      : "=qm"(error) : "a"(&phys_addr), "m"(phys_addr)
-		      : "cc", "memory");
+	asm volatile(ASM_VMX_VMCLEAR_RAX "; setna %0"
+				 : "=qm"(error)
+				 : "a"(&phys_addr), "m"(phys_addr)
+				 : "cc", "memory");
 	if (error)
-		printk(KERN_ERR "kvm: vmclear fail: %p/%llx\n",
-		       vmcs, phys_addr);
+		printk(KERN_ERR "kvm: vmclear fail: %p/%llx\n", vmcs, phys_addr);
 }
 
 static void vmcs_load(struct vmcs *vmcs)
@@ -254,12 +252,12 @@ static void vmcs_load(struct vmcs *vmcs)
 	u64 phys_addr = __pa(vmcs);
 	u8 error;
 
-	asm volatile (ASM_VMX_VMPTRLD_RAX "; setna %0"
-			: "=qm"(error) : "a"(&phys_addr), "m"(phys_addr)
-			: "cc", "memory");
+	asm volatile(ASM_VMX_VMPTRLD_RAX "; setna %0"
+				 : "=qm"(error)
+				 : "a"(&phys_addr), "m"(phys_addr)
+				 : "cc", "memory");
 	if (error)
-		printk(KERN_ERR "vmx: vmptrld %p/%llx failed\n",
-		       vmcs, phys_addr);
+		printk(KERN_ERR "vmx: vmptrld %p/%llx failed\n", vmcs, phys_addr);
 }
 
 static __always_inline u16 vmcs_read16(unsigned long field)
@@ -277,14 +275,14 @@ static __always_inline u64 vmcs_read64(unsigned long field)
 #ifdef CONFIG_X86_64
 	return vmcs_readl(field);
 #else
-	return vmcs_readl(field) | ((u64)vmcs_readl(field+1) << 32);
+	return vmcs_readl(field) | ((u64)vmcs_readl(field + 1) << 32);
 #endif
 }
 
 static noinline void vmwrite_error(unsigned long field, unsigned long value)
 {
-	printk(KERN_ERR "vmwrite error: reg %lx value %lx (err %d)\n",
-	       field, value, vmcs_read32(VM_INSTRUCTION_ERROR));
+	printk(KERN_ERR "vmwrite error: reg %lx value %lx (err %d)\n", field, value,
+		   vmcs_read32(VM_INSTRUCTION_ERROR));
 	dump_stack();
 }
 
@@ -292,8 +290,10 @@ static void vmcs_writel(unsigned long field, unsigned long value)
 {
 	u8 error;
 
-	asm volatile (ASM_VMX_VMWRITE_RAX_RDX "; setna %0"
-		       : "=q"(error) : "a"(value), "d"(field) : "cc");
+	asm volatile(ASM_VMX_VMWRITE_RAX_RDX "; setna %0"
+				 : "=q"(error)
+				 : "a"(value), "d"(field)
+				 : "cc");
 	if (unlikely(error))
 		vmwrite_error(field, value);
 }
@@ -312,13 +312,13 @@ static void vmcs_write64(unsigned long field, u64 value)
 {
 	vmcs_writel(field, value);
 #ifndef CONFIG_X86_64
-	asm volatile ("");
-	vmcs_writel(field+1, value >> 32);
+	asm volatile("");
+	vmcs_writel(field + 1, value >> 32);
 #endif
 }
 
-static __init int adjust_vmx_controls(u32 ctl_min, u32 ctl_opt,
-				      u32 msr, u32 *result)
+static __init int adjust_vmx_controls(u32 ctl_min, u32 ctl_opt, u32 msr,
+									  u32 *result)
 {
 	u32 vmx_msr_low, vmx_msr_high;
 	u32 ctl = ctl_min | ctl_opt;
@@ -326,7 +326,7 @@ static __init int adjust_vmx_controls(u32 ctl_min, u32 ctl_opt,
 	rdmsr(msr, vmx_msr_low, vmx_msr_high);
 
 	ctl &= vmx_msr_high; /* bit == 0 in high word ==> must be zero */
-	ctl |= vmx_msr_low;  /* bit == 1 in low word  ==> must be one  */
+	ctl |= vmx_msr_low; /* bit == 1 in low word  ==> must be one  */
 
 	/* Ensure minimum (required) set of control bits are supported. */
 	if (ctl_min & ~ctl)
@@ -357,73 +357,66 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 	min = PIN_BASED_EXT_INTR_MASK | PIN_BASED_NMI_EXITING;
 	opt = PIN_BASED_VIRTUAL_NMIS;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_PINBASED_CTLS,
-				&_pin_based_exec_control) < 0)
+							&_pin_based_exec_control) < 0)
 		return -EIO;
 
 	min =
 #ifdef CONFIG_X86_64
-	      CPU_BASED_CR8_LOAD_EXITING |
-	      CPU_BASED_CR8_STORE_EXITING |
+		CPU_BASED_CR8_LOAD_EXITING | CPU_BASED_CR8_STORE_EXITING |
 #endif
-	      CPU_BASED_CR3_LOAD_EXITING |
-	      CPU_BASED_CR3_STORE_EXITING |
-	      CPU_BASED_MOV_DR_EXITING |
-	      CPU_BASED_USE_TSC_OFFSETING |
-	      CPU_BASED_INVLPG_EXITING;
+		CPU_BASED_CR3_LOAD_EXITING | CPU_BASED_CR3_STORE_EXITING |
+		CPU_BASED_MOV_DR_EXITING | CPU_BASED_USE_TSC_OFFSETING |
+		CPU_BASED_INVLPG_EXITING;
 
-	opt = CPU_BASED_TPR_SHADOW |
-	      CPU_BASED_USE_MSR_BITMAPS |
-	      CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+	opt = CPU_BASED_TPR_SHADOW | CPU_BASED_USE_MSR_BITMAPS |
+		  CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_PROCBASED_CTLS,
-				&_cpu_based_exec_control) < 0)
+							&_cpu_based_exec_control) < 0)
 		return -EIO;
 #ifdef CONFIG_X86_64
 	if ((_cpu_based_exec_control & CPU_BASED_TPR_SHADOW))
-		_cpu_based_exec_control &= ~CPU_BASED_CR8_LOAD_EXITING &
-					   ~CPU_BASED_CR8_STORE_EXITING;
+		_cpu_based_exec_control &=
+			~CPU_BASED_CR8_LOAD_EXITING & ~CPU_BASED_CR8_STORE_EXITING;
 #endif
 	if (_cpu_based_exec_control & CPU_BASED_ACTIVATE_SECONDARY_CONTROLS) {
 		min2 = 0;
-		opt2 =  SECONDARY_EXEC_WBINVD_EXITING |
-			SECONDARY_EXEC_ENABLE_VPID |
-			SECONDARY_EXEC_ENABLE_EPT |
-			SECONDARY_EXEC_RDTSCP |
-			SECONDARY_EXEC_ENABLE_INVPCID;
-		if (adjust_vmx_controls(min2, opt2,
-					MSR_IA32_VMX_PROCBASED_CTLS2,
-					&_cpu_based_2nd_exec_control) < 0)
+		opt2 = SECONDARY_EXEC_WBINVD_EXITING | SECONDARY_EXEC_ENABLE_VPID |
+			   SECONDARY_EXEC_ENABLE_EPT | SECONDARY_EXEC_RDTSCP |
+			   SECONDARY_EXEC_ENABLE_INVPCID;
+		if (adjust_vmx_controls(min2, opt2, MSR_IA32_VMX_PROCBASED_CTLS2,
+								&_cpu_based_2nd_exec_control) < 0)
 			return -EIO;
 	}
 #ifndef CONFIG_X86_64
 	if (!(_cpu_based_2nd_exec_control &
-				SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES))
+		  SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES))
 		_cpu_based_exec_control &= ~CPU_BASED_TPR_SHADOW;
 #endif
 	if (_cpu_based_2nd_exec_control & SECONDARY_EXEC_ENABLE_EPT) {
 		/* CR3 accesses and invlpg don't need to cause VM Exits when EPT
 		   enabled */
-		_cpu_based_exec_control &= ~(CPU_BASED_CR3_LOAD_EXITING |
-					     CPU_BASED_CR3_STORE_EXITING |
-					     CPU_BASED_INVLPG_EXITING);
-		rdmsr(MSR_IA32_VMX_EPT_VPID_CAP,
-		      vmx_capability.ept, vmx_capability.vpid);
+		_cpu_based_exec_control &=
+			~(CPU_BASED_CR3_LOAD_EXITING | CPU_BASED_CR3_STORE_EXITING |
+			  CPU_BASED_INVLPG_EXITING);
+		rdmsr(MSR_IA32_VMX_EPT_VPID_CAP, vmx_capability.ept,
+			  vmx_capability.vpid);
 	}
 
 	min = 0;
 #ifdef CONFIG_X86_64
 	min |= VM_EXIT_HOST_ADDR_SPACE_SIZE;
 #endif
-//	opt = VM_EXIT_SAVE_IA32_PAT | VM_EXIT_LOAD_IA32_PAT;
+	//	opt = VM_EXIT_SAVE_IA32_PAT | VM_EXIT_LOAD_IA32_PAT;
 	opt = 0;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
-				&_vmexit_control) < 0)
+							&_vmexit_control) < 0)
 		return -EIO;
 
 	min = 0;
-//	opt = VM_ENTRY_LOAD_IA32_PAT;
+	//	opt = VM_ENTRY_LOAD_IA32_PAT;
 	opt = 0;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_ENTRY_CTLS,
-				&_vmentry_control) < 0)
+							&_vmentry_control) < 0)
 		return -EIO;
 
 	rdmsr(MSR_IA32_VMX_BASIC, vmx_msr_low, vmx_msr_high);
@@ -434,7 +427,7 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 
 #ifdef CONFIG_X86_64
 	/* IA-32 SDM Vol 3B: 64-bit CPUs always have VMX_BASIC_MSR[48]==0. */
-	if (vmx_msr_high & (1u<<16))
+	if (vmx_msr_high & (1u << 16))
 		return -EIO;
 #endif
 
@@ -449,14 +442,12 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf)
 	vmcs_conf->pin_based_exec_ctrl = _pin_based_exec_control;
 	vmcs_conf->cpu_based_exec_ctrl = _cpu_based_exec_control;
 	vmcs_conf->cpu_based_2nd_exec_ctrl = _cpu_based_2nd_exec_control;
-	vmcs_conf->vmexit_ctrl         = _vmexit_control;
-	vmcs_conf->vmentry_ctrl        = _vmentry_control;
+	vmcs_conf->vmexit_ctrl = _vmexit_control;
+	vmcs_conf->vmentry_ctrl = _vmentry_control;
 
 	vmx_capability.has_load_efer =
-		allow_1_setting(MSR_IA32_VMX_ENTRY_CTLS,
-				VM_ENTRY_LOAD_IA32_EFER)
-		&& allow_1_setting(MSR_IA32_VMX_EXIT_CTLS,
-				   VM_EXIT_LOAD_IA32_EFER);
+		allow_1_setting(MSR_IA32_VMX_ENTRY_CTLS, VM_ENTRY_LOAD_IA32_EFER) &&
+		allow_1_setting(MSR_IA32_VMX_EXIT_CTLS, VM_EXIT_LOAD_IA32_EFER);
 
 	return 0;
 }
@@ -508,18 +499,18 @@ static void vmx_setup_constant_host_state(void)
 	unsigned long tmpl;
 	struct desc_ptr dt;
 
-	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS);  /* 22.2.3 */
-	vmcs_writel(HOST_CR4, __read_cr4());  /* 22.2.3, 22.2.5 */
-	vmcs_writel(HOST_CR3, read_cr3());  /* 22.2.3 */
+	vmcs_writel(HOST_CR0, read_cr0() & ~X86_CR0_TS); /* 22.2.3 */
+	vmcs_writel(HOST_CR4, __read_cr4()); /* 22.2.3, 22.2.5 */
+	vmcs_writel(HOST_CR3, read_cr3()); /* 22.2.3 */
 
-	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);  /* 22.2.4 */
-	vmcs_write16(HOST_DS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
-	vmcs_write16(HOST_ES_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
-	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
-	vmcs_write16(HOST_TR_SELECTOR, GDT_ENTRY_TSS*8);  /* 22.2.4 */
+	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS); /* 22.2.4 */
+	vmcs_write16(HOST_DS_SELECTOR, __KERNEL_DS); /* 22.2.4 */
+	vmcs_write16(HOST_ES_SELECTOR, __KERNEL_DS); /* 22.2.4 */
+	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS); /* 22.2.4 */
+	vmcs_write16(HOST_TR_SELECTOR, GDT_ENTRY_TSS * 8); /* 22.2.4 */
 
 	native_store_idt(&dt);
-	vmcs_writel(HOST_IDTR_BASE, dt.address);   /* 22.2.4 */
+	vmcs_writel(HOST_IDTR_BASE, dt.address); /* 22.2.4 */
 
 	asm("mov $.Lkvm_vmx_return, %0" : "=r"(tmpl));
 	vmcs_writel(HOST_RIP, tmpl); /* 22.2.5 */
@@ -527,18 +518,18 @@ static void vmx_setup_constant_host_state(void)
 	rdmsr(MSR_IA32_SYSENTER_CS, low32, high32);
 	vmcs_write32(HOST_IA32_SYSENTER_CS, low32);
 	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
-	vmcs_writel(HOST_IA32_SYSENTER_EIP, tmpl);   /* 22.2.3 */
+	vmcs_writel(HOST_IA32_SYSENTER_EIP, tmpl); /* 22.2.3 */
 
 	rdmsr(MSR_EFER, low32, high32);
 	vmcs_write32(HOST_IA32_EFER, low32);
 
 	if (vmcs_config.vmexit_ctrl & VM_EXIT_LOAD_IA32_PAT) {
 		rdmsr(MSR_IA32_CR_PAT, low32, high32);
-		vmcs_write64(HOST_IA32_PAT, low32 | ((u64) high32 << 32));
+		vmcs_write64(HOST_IA32_PAT, low32 | ((u64)high32 << 32));
 	}
 
-	vmcs_write16(HOST_FS_SELECTOR, 0);            /* 22.2.4 */
-	vmcs_write16(HOST_GS_SELECTOR, 0);            /* 22.2.4 */
+	vmcs_write16(HOST_FS_SELECTOR, 0); /* 22.2.4 */
+	vmcs_write16(HOST_GS_SELECTOR, 0); /* 22.2.4 */
 
 #ifdef CONFIG_X86_64
 	rdmsrl(MSR_FS_BASE, tmpl);
@@ -570,7 +561,7 @@ static unsigned long segment_base(u16 selector)
 
 	table_base = gdt->address;
 
-	if (selector & 4) {           /* from ldt */
+	if (selector & 4) { /* from ldt */
 		u16 ldt_selector = vmx_read_ldt();
 
 		if (!(ldt_selector & ~3))
@@ -581,8 +572,8 @@ static unsigned long segment_base(u16 selector)
 	d = (struct desc_struct *)(table_base + (selector & ~7));
 	v = get_desc_base(d);
 #ifdef CONFIG_X86_64
-       if (d->s == 0 && (d->type == 2 || d->type == 9 || d->type == 11))
-               v |= ((unsigned long)((ldttss_desc_t *)d)->base3) << 32;
+	if (d->s == 0 && (d->type == 2 || d->type == 9 || d->type == 11))
+		v |= ((unsigned long)((ldttss_desc_t *)d)->base3) << 32;
 #endif
 	return v;
 }
@@ -605,7 +596,7 @@ static void __vmx_setup_cpu(void)
 	 * processors.
 	 */
 	vmcs_writel(HOST_TR_BASE, vmx_read_tr_base()); /* 22.2.4 */
-	vmcs_writel(HOST_GDTR_BASE, gdt->address);   /* 22.2.4 */
+	vmcs_writel(HOST_GDTR_BASE, gdt->address); /* 22.2.4 */
 
 	rdmsrl(MSR_IA32_SYSENTER_ESP, sysenter_esp);
 	vmcs_writel(HOST_IA32_SYSENTER_ESP, sysenter_esp); /* 22.2.3 */
@@ -643,8 +634,8 @@ static void vmx_get_cpu(struct vmx_vcpu *vcpu)
 
 		if (vcpu->cpu != cur_cpu) {
 			if (vcpu->cpu >= 0)
-				smp_call_function_single(vcpu->cpu,
-					__vmx_get_cpu_helper, (void *) vcpu, 1);
+				smp_call_function_single(vcpu->cpu, __vmx_get_cpu_helper,
+										 (void *)vcpu, 1);
 			else
 				vmcs_clear(vcpu->vmcs);
 
@@ -687,8 +678,7 @@ static void __vmx_sync_individual_addr_helper(void *ptr)
 {
 	struct sync_addr_args *args = ptr;
 
-	ept_sync_individual_addr(args->vcpu->eptp,
-				 (args->gpa & ~(PAGE_SIZE - 1)));
+	ept_sync_individual_addr(args->vcpu->eptp, (args->gpa & ~(PAGE_SIZE - 1)));
 }
 
 /**
@@ -697,8 +687,7 @@ static void __vmx_sync_individual_addr_helper(void *ptr)
  */
 void vmx_ept_sync_vcpu(struct vmx_vcpu *vcpu)
 {
-	smp_call_function_single(vcpu->cpu,
-		__vmx_sync_helper, (void *) vcpu, 1);
+	smp_call_function_single(vcpu->cpu, __vmx_sync_helper, (void *)vcpu, 1);
 }
 
 /**
@@ -712,8 +701,8 @@ void vmx_ept_sync_individual_addr(struct vmx_vcpu *vcpu, gpa_t gpa)
 	args.vcpu = vcpu;
 	args.gpa = gpa;
 
-	smp_call_function_single(vcpu->cpu,
-		__vmx_sync_individual_addr_helper, (void *) &args, 1);
+	smp_call_function_single(vcpu->cpu, __vmx_sync_individual_addr_helper,
+							 (void *)&args, 1);
 }
 
 #define STACK_DEPTH 12
@@ -737,35 +726,34 @@ static void vmx_dump_cpu(struct vmx_vcpu *vcpu)
 	printk(KERN_INFO "vmx: --- Begin VCPU Dump ---\n");
 	printk(KERN_INFO "vmx: CPU %d VPID %d\n", vcpu->cpu, vcpu->vpid);
 	printk(KERN_INFO "vmx: RIP 0x%016llx RFLAGS 0x%08lx\n",
-	       vcpu->regs[VCPU_REGS_RIP], flags);
+		   vcpu->regs[VCPU_REGS_RIP], flags);
 	printk(KERN_INFO "vmx: RAX 0x%016llx RCX 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_RAX], vcpu->regs[VCPU_REGS_RCX]);
+		   vcpu->regs[VCPU_REGS_RAX], vcpu->regs[VCPU_REGS_RCX]);
 	printk(KERN_INFO "vmx: RDX 0x%016llx RBX 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_RDX], vcpu->regs[VCPU_REGS_RBX]);
+		   vcpu->regs[VCPU_REGS_RDX], vcpu->regs[VCPU_REGS_RBX]);
 	printk(KERN_INFO "vmx: RSP 0x%016llx RBP 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_RSP], vcpu->regs[VCPU_REGS_RBP]);
+		   vcpu->regs[VCPU_REGS_RSP], vcpu->regs[VCPU_REGS_RBP]);
 	printk(KERN_INFO "vmx: RSI 0x%016llx RDI 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_RSI], vcpu->regs[VCPU_REGS_RDI]);
+		   vcpu->regs[VCPU_REGS_RSI], vcpu->regs[VCPU_REGS_RDI]);
 	printk(KERN_INFO "vmx: R8  0x%016llx R9  0x%016llx\n",
-			vcpu->regs[VCPU_REGS_R8], vcpu->regs[VCPU_REGS_R9]);
+		   vcpu->regs[VCPU_REGS_R8], vcpu->regs[VCPU_REGS_R9]);
 	printk(KERN_INFO "vmx: R10 0x%016llx R11 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_R10], vcpu->regs[VCPU_REGS_R11]);
+		   vcpu->regs[VCPU_REGS_R10], vcpu->regs[VCPU_REGS_R11]);
 	printk(KERN_INFO "vmx: R12 0x%016llx R13 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_R12], vcpu->regs[VCPU_REGS_R13]);
+		   vcpu->regs[VCPU_REGS_R12], vcpu->regs[VCPU_REGS_R13]);
 	printk(KERN_INFO "vmx: R14 0x%016llx R15 0x%016llx\n",
-			vcpu->regs[VCPU_REGS_R14], vcpu->regs[VCPU_REGS_R15]);
+		   vcpu->regs[VCPU_REGS_R14], vcpu->regs[VCPU_REGS_R15]);
 	printk(KERN_INFO "vmx: FS.base 0x%016lx GS.base 0x%016lx\n",
-			vmcs_readl(GUEST_FS_BASE), vmcs_readl(GUEST_GS_BASE));
+		   vmcs_readl(GUEST_FS_BASE), vmcs_readl(GUEST_GS_BASE));
 
 	printk(KERN_INFO "vmx: Dumping Stack Contents...\n");
-	sp = (unsigned long *) vcpu->regs[VCPU_REGS_RSP];
+	sp = (unsigned long *)vcpu->regs[VCPU_REGS_RSP];
 	for (i = 0; i < STACK_DEPTH; i++)
 		if (get_user(val, &sp[i]))
-			printk(KERN_INFO "vmx: RSP%+-3ld ?\n",
-				i * sizeof(long));
+			printk(KERN_INFO "vmx: RSP%+-3ld ?\n", i * sizeof(long));
 		else
-			printk(KERN_INFO "vmx: RSP%+-3ld 0x%016lx\n",
-				i * sizeof(long), val);
+			printk(KERN_INFO "vmx: RSP%+-3ld 0x%016lx\n", i * sizeof(long),
+				   val);
 
 	printk(KERN_INFO "vmx: --- End VCPU Dump ---\n");
 }
@@ -775,8 +763,7 @@ static u64 construct_eptp(unsigned long root_hpa)
 	u64 eptp;
 
 	/* TODO write the value reading from MSR */
-	eptp = VMX_EPT_DEFAULT_MT |
-		VMX_EPT_DEFAULT_GAW << VMX_EPT_GAW_EPTP_SHIFT;
+	eptp = VMX_EPT_DEFAULT_MT | VMX_EPT_DEFAULT_GAW << VMX_EPT_GAW_EPTP_SHIFT;
 	if (cpu_has_vmx_ept_ad_bits())
 		eptp |= VMX_EPT_AD_ENABLE_BIT;
 	eptp |= (root_hpa & PAGE_MASK);
@@ -791,7 +778,7 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 {
 	unsigned long tmpl;
 	unsigned long cr4 = X86_CR4_PAE | X86_CR4_VMXE | X86_CR4_OSXMMEXCPT |
-			    X86_CR4_PGE | X86_CR4_OSFXSR;
+						X86_CR4_PGE | X86_CR4_OSFXSR;
 	if (boot_cpu_has(X86_FEATURE_PCID))
 		cr4 |= X86_CR4_PCIDE;
 	if (boot_cpu_has(X86_FEATURE_OSXSAVE))
@@ -800,15 +787,14 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 		cr4 |= X86_CR4_FSGSBASE;
 
 	/* configure control and data registers */
-	vmcs_writel(GUEST_CR0, X86_CR0_PG | X86_CR0_PE | X86_CR0_WP |
-			       X86_CR0_MP | X86_CR0_ET | X86_CR0_NE);
+	vmcs_writel(GUEST_CR0, X86_CR0_PG | X86_CR0_PE | X86_CR0_WP | X86_CR0_MP |
+							   X86_CR0_ET | X86_CR0_NE);
 	vmcs_writel(CR0_READ_SHADOW, X86_CR0_PG | X86_CR0_PE | X86_CR0_WP |
-				     X86_CR0_MP | X86_CR0_ET | X86_CR0_NE);
+									 X86_CR0_MP | X86_CR0_ET | X86_CR0_NE);
 	vmcs_writel(GUEST_CR3, conf->cr3);
 	vmcs_writel(GUEST_CR4, cr4);
 	vmcs_writel(CR4_READ_SHADOW, cr4);
-	vmcs_writel(GUEST_IA32_EFER, EFER_LME | EFER_LMA |
-				     EFER_SCE | EFER_FFXSR);
+	vmcs_writel(GUEST_IA32_EFER, EFER_LME | EFER_LMA | EFER_SCE | EFER_FFXSR);
 	vmcs_writel(GUEST_GDTR_BASE, 0);
 	vmcs_writel(GUEST_GDTR_LIMIT, 0);
 	vmcs_writel(GUEST_IDTR_BASE, 0);
@@ -870,7 +856,7 @@ static void vmx_setup_initial_guest_state(struct dune_config *conf)
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);
 	vmcs_write32(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	vmcs_write64(GUEST_IA32_DEBUGCTL, 0);
-	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0);  /* 22.2.1 */
+	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, 0); /* 22.2.1 */
 }
 
 static void setup_perf_msrs(struct vmx_vcpu *vcpu)
@@ -935,22 +921,20 @@ static void vmx_setup_vmcs(struct vmx_vcpu *vcpu)
 	vmcs_write64(VMCS_LINK_POINTER, -1ull); /* 22.3.1.5 */
 
 	/* Control */
-	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL,
-		vmcs_config.pin_based_exec_ctrl);
+	vmcs_write32(PIN_BASED_VM_EXEC_CONTROL, vmcs_config.pin_based_exec_ctrl);
 
-	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL,
-		vmcs_config.cpu_based_exec_ctrl);
+	vmcs_write32(CPU_BASED_VM_EXEC_CONTROL, vmcs_config.cpu_based_exec_ctrl);
 
 	if (cpu_has_secondary_exec_ctrls()) {
 		vmcs_write32(SECONDARY_VM_EXEC_CONTROL,
-			     vmcs_config.cpu_based_2nd_exec_ctrl);
+					 vmcs_config.cpu_based_2nd_exec_ctrl);
 	}
 
 	vmcs_write64(EPT_POINTER, vcpu->eptp);
 
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, 0);
 	vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, 0);
-	vmcs_write32(CR3_TARGET_COUNT, 0);           /* 22.2.1 */
+	vmcs_write32(CR3_TARGET_COUNT, 0); /* 22.2.1 */
 
 	setup_msr(vcpu);
 #if 0
@@ -1042,8 +1026,8 @@ static void vmx_setup_registers(struct vmx_vcpu *vcpu, struct dune_config *conf)
 	vcpu->regs[VCPU_REGS_RSI] = conf->rsi;
 	vcpu->regs[VCPU_REGS_RDI] = conf->rdi;
 	vcpu->regs[VCPU_REGS_RBP] = conf->rbp;
-	vcpu->regs[VCPU_REGS_R8]  = conf->r8;
-	vcpu->regs[VCPU_REGS_R9]  = conf->r9;
+	vcpu->regs[VCPU_REGS_R8] = conf->r8;
+	vcpu->regs[VCPU_REGS_R9] = conf->r9;
 	vcpu->regs[VCPU_REGS_R10] = conf->r10;
 	vcpu->regs[VCPU_REGS_R11] = conf->r11;
 	vcpu->regs[VCPU_REGS_R12] = conf->r12;
@@ -1059,7 +1043,8 @@ static void vmx_setup_registers(struct vmx_vcpu *vcpu, struct dune_config *conf)
 /**
  * vmx_copy_registers_to_conf - copy registers to dune_config
  */
-static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config *conf)
+static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu,
+									   struct dune_config *conf)
 {
 	conf->rax = vcpu->regs[VCPU_REGS_RAX];
 	conf->rbx = vcpu->regs[VCPU_REGS_RBX];
@@ -1086,13 +1071,13 @@ static void vmx_copy_registers_to_conf(struct vmx_vcpu *vcpu, struct dune_config
  *
  * Returns: A new VCPU structure
  */
-static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
+static struct vmx_vcpu *vmx_create_vcpu(struct dune_config *conf)
 {
 	struct vmx_vcpu *vcpu;
 
 	if (conf->vcpu) {
 		/* This Dune configuration already has a VCPU. */
-		vcpu = (struct vmx_vcpu *) conf->vcpu;
+		vcpu = (struct vmx_vcpu *)conf->vcpu;
 		vmx_get_cpu(vcpu);
 		vmx_setup_registers(vcpu, conf);
 		vmx_put_cpu(vcpu);
@@ -1108,7 +1093,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 	list_add(&vcpu->list, &vcpus);
 
 	vcpu->conf = conf;
-	conf->vcpu = (u64) vcpu;
+	conf->vcpu = (u64)vcpu;
 
 	vcpu->vmcs = vmx_alloc_vmcs();
 	if (!vcpu->vmcs)
@@ -1118,7 +1103,7 @@ static struct vmx_vcpu * vmx_create_vcpu(struct dune_config *conf)
 		goto fail_vpid;
 
 	vcpu->cpu = -1;
-	vcpu->syscall_tbl = (void *) &dune_syscall_tbl;
+	vcpu->syscall_tbl = (void *)&dune_syscall_tbl;
 
 	spin_lock_init(&vcpu->ept_lock);
 	if (vmx_init_ept(vcpu))
@@ -1170,9 +1155,8 @@ void vmx_cleanup(void)
 {
 	struct vmx_vcpu *vcpu, *tmp;
 
-	list_for_each_entry_safe(vcpu, tmp, &vcpus, list) {
-		printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n",
-		       vcpu->vpid);
+	list_for_each_entry_safe (vcpu, tmp, &vcpus, list) {
+		printk(KERN_ERR "vmx: destroying VCPU (VPID %d)\n", vcpu->vpid);
 		list_del(&vcpu->list);
 		vmx_destroy_vcpu(vcpu);
 	}
@@ -1180,28 +1164,27 @@ void vmx_cleanup(void)
 
 static long dune_exit(int error_code, struct vmx_vcpu *vcpu)
 {
-    vcpu->shutdown = 1;
-    vcpu->ret_code = DUNE_RET_EXIT;
-    vcpu->conf->status = error_code;
+	vcpu->shutdown = 1;
+	vcpu->ret_code = DUNE_RET_EXIT;
+	vcpu->conf->status = error_code;
 
-    return 0;
+	return 0;
 }
 
 static long dune_exit_group(int error_code, struct vmx_vcpu *vcpu)
 {
-    /* NOTE: we're supposed to send a signal to other threads before
+	/* NOTE: we're supposed to send a signal to other threads before
      * exiting. Because we don't yet support signals we do nothing
      * extra for now.
      */
-    vcpu->shutdown = 1;
-    vcpu->ret_code = DUNE_RET_EXIT;
-    vcpu->conf->status = error_code;
+	vcpu->shutdown = 1;
+	vcpu->ret_code = DUNE_RET_EXIT;
+	vcpu->conf->status = error_code;
 
-    return 0;
+	return 0;
 }
 
-static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
-			 int sysnr)
+static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs, int sysnr)
 {
 	regs->ax = sysnr;
 	regs->orig_ax = vcpu->regs[VCPU_REGS_RAX];
@@ -1224,8 +1207,7 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	regs->ip = vmcs_readl(GUEST_RIP);
 	regs->sp = vmcs_readl(GUEST_RSP);
 	/* FIXME: do we need to set up other flags? */
-	regs->flags = (vmcs_readl(GUEST_RFLAGS) & 0xFF) |
-		      X86_EFLAGS_IF | 0x2;
+	regs->flags = (vmcs_readl(GUEST_RFLAGS) & 0xFF) | X86_EFLAGS_IF | 0x2;
 	vmx_put_cpu(vcpu);
 
 	/*
@@ -1236,7 +1218,7 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 	 * in a child process since it is not running in Dune.
 	 * Our solution is to adopt a special Dune convention
 	 * where the desired %RIP address is provided in %RCX.
-	 */ 
+	 */
 	if (!(__addr_ok(regs->ip)))
 		regs->ip = regs->cx;
 
@@ -1245,39 +1227,39 @@ static void make_pt_regs(struct vmx_vcpu *vcpu, struct pt_regs *regs,
 }
 
 static long dune_sys_clone(unsigned long clone_flags, unsigned long newsp,
-                           void __user *parent_tid, void __user *child_tid,
-                           unsigned long tls, struct vmx_vcpu *vcpu)
+						   void __user *parent_tid, void __user *child_tid,
+						   unsigned long tls, struct vmx_vcpu *vcpu)
 {
-    struct pt_regs regs;
-    make_pt_regs(vcpu, &regs, __NR_clone);
-    if (!newsp)
-        newsp = regs.sp;
+	struct pt_regs regs;
+	make_pt_regs(vcpu, &regs, __NR_clone);
+	if (!newsp)
+		newsp = regs.sp;
 
-    return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
-                        tls);
+	return dune_do_fork(clone_flags, newsp, &regs, 0, parent_tid, child_tid,
+						tls);
 }
 
 static long dune_sys_fork(struct vmx_vcpu *vcpu)
 {
-    struct pt_regs regs;
-    make_pt_regs(vcpu, &regs, __NR_fork);
+	struct pt_regs regs;
+	make_pt_regs(vcpu, &regs, __NR_fork);
 
-    return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL, 0);
+	return dune_do_fork(SIGCHLD, regs.sp, &regs, 0, NULL, NULL, 0);
 }
 
 static long dune_sys_vfork(struct vmx_vcpu *vcpu)
 {
-    struct pt_regs regs;
-    make_pt_regs(vcpu, &regs, __NR_vfork);
+	struct pt_regs regs;
+	make_pt_regs(vcpu, &regs, __NR_vfork);
 
-    return dune_do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp, &regs, 0,
-                        NULL, NULL, 0);
+	return dune_do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp, &regs, 0,
+						NULL, NULL, 0);
 }
 
 static void vmx_init_syscall(void)
 {
-	memcpy(dune_syscall_tbl, (void *) SYSCALL_TBL,
-	       sizeof(sys_call_ptr_t) * NUM_SYSCALLS);
+	memcpy(dune_syscall_tbl, (void *)SYSCALL_TBL,
+		   sizeof(sys_call_ptr_t) * NUM_SYSCALLS);
 }
 
 #ifdef CONFIG_X86_64
@@ -1296,30 +1278,29 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 {
 	asm(
 		/* Store host registers */
-		"push %%"R"dx; push %%"R"bp;"
-		"push %%"R"cx \n\t" /* placeholder for guest rcx */
-		"push %%"R"cx \n\t"
-		"cmp %%"R"sp, %c[host_rsp](%0) \n\t"
+		"push %%" R "dx; push %%" R "bp;"
+		"push %%" R "cx \n\t" /* placeholder for guest rcx */
+		"push %%" R "cx \n\t"
+		"cmp %%" R "sp, %c[host_rsp](%0) \n\t"
 		"je 1f \n\t"
-		"mov %%"R"sp, %c[host_rsp](%0) \n\t"
-		ASM_VMX_VMWRITE_RSP_RDX "\n\t"
+		"mov %%" R "sp, %c[host_rsp](%0) \n\t" ASM_VMX_VMWRITE_RSP_RDX "\n\t"
 		"1: \n\t"
 		/* Reload cr2 if changed */
-		"mov %c[cr2](%0), %%"R"ax \n\t"
-		"mov %%cr2, %%"R"dx \n\t"
-		"cmp %%"R"ax, %%"R"dx \n\t"
+		"mov %c[cr2](%0), %%" R "ax \n\t"
+		"mov %%cr2, %%" R "dx \n\t"
+		"cmp %%" R "ax, %%" R "dx \n\t"
 		"je 2f \n\t"
-		"mov %%"R"ax, %%cr2 \n\t"
+		"mov %%" R "ax, %%cr2 \n\t"
 		"2: \n\t"
 		/* Check if vmlaunch of vmresume is needed */
 		"cmpl $0, %c[launched](%0) \n\t"
 		/* Load guest registers.  Don't clobber flags. */
-		"mov %c[rax](%0), %%"R"ax \n\t"
-		"mov %c[rbx](%0), %%"R"bx \n\t"
-		"mov %c[rdx](%0), %%"R"dx \n\t"
-		"mov %c[rsi](%0), %%"R"si \n\t"
-		"mov %c[rdi](%0), %%"R"di \n\t"
-		"mov %c[rbp](%0), %%"R"bp \n\t"
+		"mov %c[rax](%0), %%" R "ax \n\t"
+		"mov %c[rbx](%0), %%" R "bx \n\t"
+		"mov %c[rdx](%0), %%" R "dx \n\t"
+		"mov %c[rsi](%0), %%" R "si \n\t"
+		"mov %c[rdi](%0), %%" R "di \n\t"
+		"mov %c[rbp](%0), %%" R "bp \n\t"
 #ifdef CONFIG_X86_64
 		"mov %c[r8](%0),  %%r8  \n\t"
 		"mov %c[r9](%0),  %%r9  \n\t"
@@ -1330,24 +1311,23 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 		"mov %c[r14](%0), %%r14 \n\t"
 		"mov %c[r15](%0), %%r15 \n\t"
 #endif
-		"mov %c[rcx](%0), %%"R"cx \n\t" /* kills %0 (ecx) */
+		"mov %c[rcx](%0), %%" R "cx \n\t" /* kills %0 (ecx) */
 
 		/* Enter guest mode */
-		"jne .Llaunched \n\t"
-		ASM_VMX_VMLAUNCH "\n\t"
+		"jne .Llaunched \n\t" ASM_VMX_VMLAUNCH "\n\t"
 		"jmp .Lkvm_vmx_return \n\t"
 		".Llaunched: " ASM_VMX_VMRESUME "\n\t"
 		".Lkvm_vmx_return: "
 		/* Save guest registers, load host registers, keep flags */
-		"mov %0, %c[wordsize](%%"R"sp) \n\t"
+		"mov %0, %c[wordsize](%%" R "sp) \n\t"
 		"pop %0 \n\t"
-		"mov %%"R"ax, %c[rax](%0) \n\t"
-		"mov %%"R"bx, %c[rbx](%0) \n\t"
-		"pop"Q" %c[rcx](%0) \n\t"
-		"mov %%"R"dx, %c[rdx](%0) \n\t"
-		"mov %%"R"si, %c[rsi](%0) \n\t"
-		"mov %%"R"di, %c[rdi](%0) \n\t"
-		"mov %%"R"bp, %c[rbp](%0) \n\t"
+		"mov %%" R "ax, %c[rax](%0) \n\t"
+		"mov %%" R "bx, %c[rbx](%0) \n\t"
+		"pop" Q " %c[rcx](%0) \n\t"
+		"mov %%" R "dx, %c[rdx](%0) \n\t"
+		"mov %%" R "si, %c[rsi](%0) \n\t"
+		"mov %%" R "di, %c[rdi](%0) \n\t"
+		"mov %%" R "bp, %c[rbp](%0) \n\t"
 #ifdef CONFIG_X86_64
 		"mov %%r8,  %c[r8](%0) \n\t"
 		"mov %%r9,  %c[r9](%0) \n\t"
@@ -1361,42 +1341,42 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 		"mov %%rax, %%r10 \n\t"
 		"mov %%rdx, %%r11 \n\t"
 
-		"mov %%cr2, %%"R"ax   \n\t"
-		"mov %%"R"ax, %c[cr2](%0) \n\t"
+		"mov %%cr2, %%" R "ax   \n\t"
+		"mov %%" R "ax, %c[cr2](%0) \n\t"
 
-		"pop  %%"R"bp; pop  %%"R"dx \n\t"
+		"pop  %%" R "bp; pop  %%" R "dx \n\t"
 		"setbe %c[fail](%0) \n\t"
 
 		"mov $" __stringify(__USER_DS) ", %%rax \n\t"
-		"mov %%rax, %%ds \n\t"
-		"mov %%rax, %%es \n\t"
-	      : : "c"(vcpu), "d"((unsigned long)HOST_RSP),
-		[launched]"i"(offsetof(struct vmx_vcpu, launched)),
-		[fail]"i"(offsetof(struct vmx_vcpu, fail)),
-		[host_rsp]"i"(offsetof(struct vmx_vcpu, host_rsp)),
-		[rax]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RAX])),
-		[rbx]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RBX])),
-		[rcx]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RCX])),
-		[rdx]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RDX])),
-		[rsi]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RSI])),
-		[rdi]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RDI])),
-		[rbp]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RBP])),
+									   "mov %%rax, %%ds \n\t"
+									   "mov %%rax, %%es \n\t"
+		:
+		: "c"(vcpu), "d"((unsigned long)HOST_RSP),
+		  [launched] "i"(offsetof(struct vmx_vcpu, launched)),
+		  [fail] "i"(offsetof(struct vmx_vcpu, fail)),
+		  [host_rsp] "i"(offsetof(struct vmx_vcpu, host_rsp)),
+		  [rax] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RAX])),
+		  [rbx] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RBX])),
+		  [rcx] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RCX])),
+		  [rdx] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RDX])),
+		  [rsi] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RSI])),
+		  [rdi] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RDI])),
+		  [rbp] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_RBP])),
 #ifdef CONFIG_X86_64
-		[r8]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R8])),
-		[r9]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R9])),
-		[r10]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R10])),
-		[r11]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R11])),
-		[r12]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R12])),
-		[r13]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R13])),
-		[r14]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R14])),
-		[r15]"i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R15])),
+		  [r8] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R8])),
+		  [r9] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R9])),
+		  [r10] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R10])),
+		  [r11] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R11])),
+		  [r12] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R12])),
+		  [r13] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R13])),
+		  [r14] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R14])),
+		  [r15] "i"(offsetof(struct vmx_vcpu, regs[VCPU_REGS_R15])),
 #endif
-		[cr2]"i"(offsetof(struct vmx_vcpu, cr2)),
-		[wordsize]"i"(sizeof(ulong))
-	      : "cc", "memory"
-		, R"ax", R"bx", R"di", R"si"
+		  [cr2] "i"(offsetof(struct vmx_vcpu, cr2)), [wordsize] "i"(sizeof(ulong))
+		: "cc", "memory", R "ax", R "bx", R "di", R "si"
 #ifdef CONFIG_X86_64
-		, "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+		  ,
+		  "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
 #endif
 	);
 
@@ -1404,7 +1384,7 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 
 	if (unlikely(vcpu->fail)) {
 		printk(KERN_ERR "vmx: failure detected (err %x)\n",
-		       vmcs_read32(VM_INSTRUCTION_ERROR));
+			   vmcs_read32(VM_INSTRUCTION_ERROR));
 		return VMX_EXIT_REASONS_FAILED_VMENTRY;
 	}
 
@@ -1420,8 +1400,8 @@ static int __noclone vmx_run_vcpu(struct vmx_vcpu *vcpu)
 
 static void vmx_step_instruction(void)
 {
-	vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) +
-			       vmcs_read32(VM_EXIT_INSTRUCTION_LEN));
+	vmcs_writel(GUEST_RIP,
+				vmcs_readl(GUEST_RIP) + vmcs_read32(VM_EXIT_INSTRUCTION_LEN));
 }
 
 static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
@@ -1434,12 +1414,12 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 	gva = vmcs_readl(GUEST_LINEAR_ADDRESS);
 	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
 	vmx_put_cpu(vcpu);
-	
+
 	if (exit_qual & (1 << 6)) {
 		printk(KERN_ERR "EPT: GPA 0x%lx exceeds GAW!\n", gpa);
 		return -EINVAL;
 	}
-	
+
 	if (!(exit_qual & (1 << 7))) {
 		printk(KERN_ERR "EPT: linear address is not valid, GPA: 0x%lx!\n", gpa);
 		return -EINVAL;
@@ -1449,8 +1429,8 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 
 	if (ret) {
 		printk(KERN_ERR "vmx: page fault failure "
-		       "GPA: 0x%lx, GVA: 0x%lx\n",
-		       gpa, gva);
+						"GPA: 0x%lx, GVA: 0x%lx\n",
+			   gpa, gva);
 		vcpu->ret_code = DUNE_RET_EPT_VIOLATION;
 		vmx_dump_cpu(vcpu);
 	}
@@ -1460,90 +1440,90 @@ static int vmx_handle_ept_violation(struct vmx_vcpu *vcpu)
 
 static void vmx_handle_syscall(struct vmx_vcpu *vcpu)
 {
-    typedef long (*sys_fn)(struct pt_regs *);
-    sys_fn *tbl;
-    struct pt_regs args;
+	typedef long (*sys_fn)(struct pt_regs *);
+	sys_fn *tbl;
+	struct pt_regs args;
 
-    __u64 orig_rax;
-    long ret;
+	__u64 orig_rax;
+	long ret;
 
-    printk(KERN_ERR
-           "vmx: %d: syscall %d(0x%llx,0x%llx,0x%llx,0x%llx,0x%llx,0x%llx) from 0x%llx\n",
-           current->pid, (int)vcpu->regs[VCPU_REGS_RAX],
-           vcpu->regs[VCPU_REGS_RDI], vcpu->regs[VCPU_REGS_RSI],
-           vcpu->regs[VCPU_REGS_RDX], vcpu->regs[VCPU_REGS_R10],
-           vcpu->regs[VCPU_REGS_R8], vcpu->regs[VCPU_REGS_R9],
-           vcpu->regs[VCPU_REGS_RCX]);
+	printk(
+		KERN_ERR
+		"vmx: %d: syscall %d(0x%llx,0x%llx,0x%llx,0x%llx,0x%llx,0x%llx) from 0x%llx\n",
+		current->pid, (int)vcpu->regs[VCPU_REGS_RAX], vcpu->regs[VCPU_REGS_RDI],
+		vcpu->regs[VCPU_REGS_RSI], vcpu->regs[VCPU_REGS_RDX],
+		vcpu->regs[VCPU_REGS_R10], vcpu->regs[VCPU_REGS_R8],
+		vcpu->regs[VCPU_REGS_R9], vcpu->regs[VCPU_REGS_RCX]);
 
-    if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
-        vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
-        return;
-    }
+	if (unlikely(vcpu->regs[VCPU_REGS_RAX] > NUM_SYSCALLS)) {
+		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
+		return;
+	}
 
-    if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
-                 vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
-        printk(KERN_INFO "vmx: got unsupported syscall\n");
-        vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
-        return;
-    }
+	if (unlikely(vcpu->regs[VCPU_REGS_RAX] == __NR_sigaltstack ||
+				 vcpu->regs[VCPU_REGS_RAX] == __NR_iopl)) {
+		printk(KERN_INFO "vmx: got unsupported syscall\n");
+		vcpu->regs[VCPU_REGS_RAX] = -EINVAL;
+		return;
+	}
 
-    orig_rax = vcpu->regs[VCPU_REGS_RAX];
+	orig_rax = vcpu->regs[VCPU_REGS_RAX];
 
-    switch (orig_rax) {
-    case __NR_clone:
-        ret = dune_sys_clone(vcpu->regs[VCPU_REGS_RDI],
-                             vcpu->regs[VCPU_REGS_RSI],
-                             (void *)vcpu->regs[VCPU_REGS_RDX],
-                             (void *)vcpu->regs[VCPU_REGS_R10],
-                             vcpu->regs[VCPU_REGS_R8], vcpu);
-        break;
-    case __NR_fork:
-        ret = dune_sys_fork(vcpu);
-        break;
-    case __NR_vfork:
-        ret = dune_sys_vfork(vcpu);
-        break;
-    case __NR_exit:
-        ret = dune_exit(vcpu->regs[VCPU_REGS_RDI], vcpu);
-        break;
-    case __NR_exit_group:
-        ret = dune_exit_group(vcpu->regs[VCPU_REGS_RDI], vcpu);
-        break;
-    default:
-        args = (struct pt_regs){
-            .ax = vcpu->regs[VCPU_REGS_RAX],
-            .di = vcpu->regs[VCPU_REGS_RDI],
-            .si = vcpu->regs[VCPU_REGS_RSI],
-            .dx = vcpu->regs[VCPU_REGS_RDX],
-            .r10 = vcpu->regs[VCPU_REGS_R10],
-            .r8 = vcpu->regs[VCPU_REGS_R8],
-            .r9 = vcpu->regs[VCPU_REGS_R9],
-        };
-        tbl = (sys_fn *)vcpu->syscall_tbl;
-        ret = tbl[orig_rax](&args);
-        break;
-    }
+	switch (orig_rax) {
+	case __NR_clone:
+		ret =
+			dune_sys_clone(vcpu->regs[VCPU_REGS_RDI], vcpu->regs[VCPU_REGS_RSI],
+						   (void *)vcpu->regs[VCPU_REGS_RDX],
+						   (void *)vcpu->regs[VCPU_REGS_R10],
+						   vcpu->regs[VCPU_REGS_R8], vcpu);
+		break;
+	case __NR_fork:
+		ret = dune_sys_fork(vcpu);
+		break;
+	case __NR_vfork:
+		ret = dune_sys_vfork(vcpu);
+		break;
+	case __NR_exit:
+		ret = dune_exit(vcpu->regs[VCPU_REGS_RDI], vcpu);
+		break;
+	case __NR_exit_group:
+		ret = dune_exit_group(vcpu->regs[VCPU_REGS_RDI], vcpu);
+		break;
+	default:
+		args = (struct pt_regs){
+			.ax = vcpu->regs[VCPU_REGS_RAX],
+			.di = vcpu->regs[VCPU_REGS_RDI],
+			.si = vcpu->regs[VCPU_REGS_RSI],
+			.dx = vcpu->regs[VCPU_REGS_RDX],
+			.r10 = vcpu->regs[VCPU_REGS_R10],
+			.r8 = vcpu->regs[VCPU_REGS_R8],
+			.r9 = vcpu->regs[VCPU_REGS_R9],
+		};
+		tbl = (sys_fn *)vcpu->syscall_tbl;
+		ret = tbl[orig_rax](&args);
+		break;
+	}
 
-    vcpu->regs[VCPU_REGS_RAX] = ret;
+	vcpu->regs[VCPU_REGS_RAX] = ret;
 
-    /* We apply the restart semantics as if no signal handler will be
+	/* We apply the restart semantics as if no signal handler will be
 	 * executed. */
-    switch (vcpu->regs[VCPU_REGS_RAX]) {
-    case -ERESTARTNOHAND:
-    case -ERESTARTSYS:
-    case -ERESTARTNOINTR:
-        vcpu->regs[VCPU_REGS_RAX] = orig_rax;
-        vmx_get_cpu(vcpu);
-        vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
-        vmx_put_cpu(vcpu);
-        break;
-    case -ERESTART_RESTARTBLOCK:
-        vcpu->regs[VCPU_REGS_RAX] = __NR_restart_syscall;
-        vmx_get_cpu(vcpu);
-        vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
-        vmx_put_cpu(vcpu);
-        break;
-    }
+	switch (vcpu->regs[VCPU_REGS_RAX]) {
+	case -ERESTARTNOHAND:
+	case -ERESTARTSYS:
+	case -ERESTARTNOINTR:
+		vcpu->regs[VCPU_REGS_RAX] = orig_rax;
+		vmx_get_cpu(vcpu);
+		vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
+		vmx_put_cpu(vcpu);
+		break;
+	case -ERESTART_RESTARTBLOCK:
+		vcpu->regs[VCPU_REGS_RAX] = __NR_restart_syscall;
+		vmx_get_cpu(vcpu);
+		vmcs_writel(GUEST_RIP, vmcs_readl(GUEST_RIP) - 3);
+		vmx_put_cpu(vcpu);
+		break;
+	}
 }
 
 static void vmx_handle_cpuid(struct vmx_vcpu *vcpu)
@@ -1588,8 +1568,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 	if (!vcpu)
 		return -ENOMEM;
 
-	printk(KERN_ERR "vmx: created VCPU (VPID %d)\n",
-	       vcpu->vpid);
+	printk(KERN_ERR "vmx: created VCPU (VPID %d)\n", vcpu->vpid);
 
 	while (1) {
 		vmx_get_cpu(vcpu);
@@ -1613,10 +1592,8 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		}
 
 		if (signal_pending(current)) {
-
 			local_irq_enable();
 			vmx_put_cpu(vcpu);
-
 
 			vcpu->ret_code = DUNE_RET_SIGNAL;
 			break;
@@ -1629,14 +1606,13 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 		/* We need to handle NMIs before interrupts are enabled */
 		exit_intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
 		if ((exit_intr_info & INTR_INFO_INTR_TYPE_MASK) == INTR_TYPE_NMI_INTR &&
-		    (exit_intr_info & INTR_INFO_VALID_MASK)) {
+			(exit_intr_info & INTR_INFO_VALID_MASK)) {
 			asm("int $2");
 		}
 
 		local_irq_enable();
 
-		if (ret == EXIT_REASON_VMCALL ||
-		    ret == EXIT_REASON_CPUID) {
+		if (ret == EXIT_REASON_VMCALL || ret == EXIT_REASON_CPUID) {
 			vmx_step_instruction();
 		}
 
@@ -1652,8 +1628,9 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			if (vmx_handle_nmi_exception(vcpu))
 				done = 1;
 		} else if (ret != EXIT_REASON_EXTERNAL_INTERRUPT) {
-			printk(KERN_INFO "unhandled exit: reason %d, exit qualification %x\n",
-			       ret, vmcs_read32(EXIT_QUALIFICATION));
+			printk(KERN_INFO
+				   "unhandled exit: reason %d, exit qualification %x\n",
+				   ret, vmcs_read32(EXIT_QUALIFICATION));
 			vcpu->ret_code = DUNE_RET_UNHANDLED_VMEXIT;
 			vmx_dump_cpu(vcpu);
 			done = 1;
@@ -1663,8 +1640,7 @@ int vmx_launch(struct dune_config *conf, int64_t *ret_code)
 			break;
 	}
 
-	printk(KERN_ERR "vmx: stopping VCPU (VPID %d)\n",
-	       vcpu->vpid);
+	printk(KERN_ERR "vmx: stopping VCPU (VPID %d)\n", vcpu->vpid);
 
 	*ret_code = vcpu->ret_code;
 
@@ -1722,8 +1698,7 @@ static __init void vmx_enable(void *unused)
 	this_cpu_write(vmx_enabled, 1);
 	native_store_gdt(this_cpu_ptr(&host_gdt));
 
-	printk(KERN_INFO "vmx: VMX enabled on CPU %d\n",
-	       raw_smp_processor_id());
+	printk(KERN_INFO "vmx: VMX enabled on CPU %d\n", raw_smp_processor_id());
 	return;
 
 failed:
@@ -1750,7 +1725,7 @@ static void vmx_free_vmxon_areas(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu) {
+	for_each_possible_cpu (cpu) {
 		if (per_cpu(vmxarea, cpu)) {
 			vmx_free_vmcs(per_cpu(vmxarea, cpu));
 			per_cpu(vmxarea, cpu) = NULL;
@@ -1764,7 +1739,7 @@ static void vmx_free_vmxon_areas(void)
 __init int vmx_init(void)
 {
 	int r, cpu;
-	
+
 	if (!cpu_has_vmx()) {
 		printk(KERN_ERR "vmx: CPU does not support VT-x\n");
 		return -EIO;
@@ -1804,7 +1779,7 @@ __init int vmx_init(void)
 
 	set_bit(0, vmx_vpid_bitmap); /* 0 is reserved for host */
 
-	for_each_possible_cpu(cpu) {
+	for_each_possible_cpu (cpu) {
 		struct vmcs *vmxon_buf;
 
 		vmxon_buf = __vmx_alloc_vmcs(cpu);

@@ -2,8 +2,8 @@
  * bench.h - shared definitions for all benchmarks
  */
 
-#define NRPGS	100
-#define N	10000
+#define NRPGS 100
+#define N	  10000
 
 static inline void synch_tsc(void)
 {
@@ -13,15 +13,15 @@ static inline void synch_tsc(void)
 static inline unsigned long rdtscll(void)
 {
 	unsigned int a, d;
-	asm volatile("rdtsc" : "=a" (a), "=d" (d) : : "%rbx", "%rcx");
-	return ((unsigned long) a) | (((unsigned long) d) << 32);
+	asm volatile("rdtsc" : "=a"(a), "=d"(d) : : "%rbx", "%rcx");
+	return ((unsigned long)a) | (((unsigned long)d) << 32);
 }
 
 static inline unsigned long rdtscllp(void)
 {
 	unsigned int a, d;
-	asm volatile("rdtscp" : "=a" (a), "=d" (d) : : "%rbx", "%rcx");
-	return ((unsigned long) a) | (((unsigned long) d) << 32);
+	asm volatile("rdtscp" : "=a"(a), "=d"(d) : : "%rbx", "%rcx");
+	return ((unsigned long)a) | (((unsigned long)d) << 32);
 }
 
 static unsigned long measure_tsc_overhead(void)

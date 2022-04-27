@@ -13,7 +13,7 @@
 
 #include "dune.h"
 
-#define GROW_SIZE	512
+#define GROW_SIZE 512
 
 static pthread_mutex_t page_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -21,22 +21,18 @@ struct page *pages;
 static struct page_head pages_free;
 int num_pages;
 
-static void * do_mapping(void *base, unsigned long len)
+static void *do_mapping(void *base, unsigned long len)
 {
 	void *mem;
 
-	mem = mmap((void *) base, len,
-		   PROT_READ | PROT_WRITE,
-		   MAP_FIXED | MAP_HUGETLB | MAP_PRIVATE |
-		   MAP_ANONYMOUS, -1, 0);
+	mem = mmap((void *)base, len, PROT_READ | PROT_WRITE,
+			   MAP_FIXED | MAP_HUGETLB | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
-	if (mem != (void *) base) {
+	if (mem != (void *)base) {
 		// try again without huge pages
-		mem = mmap((void *) base, len,
-			   PROT_READ | PROT_WRITE,
-			   MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
-			   -1, 0);
-		if (mem != (void *) base)
+		mem = mmap((void *)base, len, PROT_READ | PROT_WRITE,
+				   MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (mem != (void *)base)
 			return NULL;
 	}
 
@@ -49,8 +45,7 @@ static int grow_size(void)
 	int new_num_pages = num_pages + GROW_SIZE;
 	void *ptr;
 
-	ptr = do_mapping((void *) PAGEBASE + num_pages * PGSIZE,
-			 GROW_SIZE * PGSIZE);
+	ptr = do_mapping((void *)PAGEBASE + num_pages * PGSIZE, GROW_SIZE * PGSIZE);
 	if (!ptr)
 		return -ENOMEM;
 
@@ -74,11 +69,11 @@ void dune_page_stats(void)
 			num_alloc++;
 	}
 
-	dune_printf("DUNE Page Allocator: Alloc %d, Free %d, Total %d\n",
-			   num_alloc, num_pages - num_alloc, num_pages);
+	dune_printf("DUNE Page Allocator: Alloc %d, Free %d, Total %d\n", num_alloc,
+				num_pages - num_alloc, num_pages);
 }
 
-struct page * dune_page_alloc(void)
+struct page *dune_page_alloc(void)
 {
 	struct page *pg;
 
@@ -110,7 +105,7 @@ void dune_page_free(struct page *pg)
 bool dune_page_isfrompool(physaddr_t pa)
 {
 	// XXX: Insufficent?
-	return (pa >= PAGEBASE) && (pa < PAGEBASE + num_pages*PGSIZE);
+	return (pa >= PAGEBASE) && (pa < PAGEBASE + num_pages * PGSIZE);
 }
 
 int dune_page_init(void)
@@ -121,7 +116,7 @@ int dune_page_init(void)
 	SLIST_INIT(&pages_free);
 	num_pages = GROW_SIZE;
 
-	mem = do_mapping((void *) PAGEBASE, num_pages * PGSIZE);
+	mem = do_mapping((void *)PAGEBASE, num_pages * PGSIZE);
 	if (!mem)
 		return -ENOMEM;
 
@@ -137,6 +132,6 @@ int dune_page_init(void)
 	return 0;
 
 err:
-	munmap((void *) PAGEBASE, num_pages * PGSIZE);
+	munmap((void *)PAGEBASE, num_pages * PGSIZE);
 	return -ENOMEM;
 }

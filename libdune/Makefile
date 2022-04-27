@@ -19,3 +19,5 @@ clean:
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_FLAGS) -o $@ -c $<
 
+format:
+	clang-format -i $(wildcard *.[ch])

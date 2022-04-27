@@ -14,7 +14,7 @@ static char *mem;
 unsigned long tsc, trap_tsc, overhead;
 unsigned long time = 0;
 
-#define PGSIZE	4096
+#define PGSIZE 4096
 
 static void prime_memory(void)
 {
@@ -27,12 +27,12 @@ static void prime_memory(void)
 
 static void benchmark1_handler(int sn, siginfo_t *si, void *ctx)
 {
-//	fprintf (stderr, "afault_handler: %x\n", si->si_addr);
-	unsigned long addr = (((unsigned long) si->si_addr) & ~(PGSIZE - 1));
+	//	fprintf (stderr, "afault_handler: %x\n", si->si_addr);
+	unsigned long addr = (((unsigned long)si->si_addr) & ~(PGSIZE - 1));
 	time += rdtscllp() - trap_tsc;
 
-	mprotect((void *) addr, PGSIZE, PROT_READ | PROT_WRITE);
-	mprotect((void *) addr + PGSIZE * NRPGS, PGSIZE, PROT_READ);
+	mprotect((void *)addr, PGSIZE, PROT_READ | PROT_WRITE);
+	mprotect((void *)addr + PGSIZE * NRPGS, PGSIZE, PROT_READ);
 }
 
 static void benchmark1(void)
@@ -47,9 +47,9 @@ static void benchmark1(void)
 
 static void benchmark2_handler(int sn, siginfo_t *si, void *ctx)
 {
-//	fprintf (stderr, "bfault_handler: %x\n", si->si_addr);
-	unsigned long addr = (((unsigned long) si->si_addr) & ~(PGSIZE - 1));
-	mprotect((void *) addr, PGSIZE, PROT_READ | PROT_WRITE);
+	//	fprintf (stderr, "bfault_handler: %x\n", si->si_addr);
+	unsigned long addr = (((unsigned long)si->si_addr) & ~(PGSIZE - 1));
+	mprotect((void *)addr, PGSIZE, PROT_READ | PROT_WRITE);
 }
 
 static void benchmark2(void)
@@ -82,7 +82,7 @@ void benchmark_fault(void)
 	int i;
 	unsigned long ticks;
 	char *fm = mmap(NULL, N * PGSIZE, PROT_READ | PROT_WRITE,
-			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+					MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
 	synch_tsc();
 	ticks = rdtscll();
@@ -90,7 +90,8 @@ void benchmark_fault(void)
 		fm[i * PGSIZE] = i;
 	}
 
-	printf("Kernel fault took %ld cycles\n", (rdtscllp() - ticks - overhead) / N);
+	printf("Kernel fault took %ld cycles\n",
+		   (rdtscllp() - ticks - overhead) / N);
 }
 
 static void benchmark_appel1(void)
@@ -146,7 +147,7 @@ static void benchmark_appel2(void)
 }
 
 int main(int argc, char *argv[])
-{	
+{
 	overhead = measure_tsc_overhead();
 	printf("TSC overhead is %ld\n", overhead);
 
@@ -154,12 +155,11 @@ int main(int argc, char *argv[])
 
 	benchmark_syscall();
 	benchmark_fault();
-	
-	mem = mmap(NULL, NRPGS * PGSIZE * 2, PROT_READ | PROT_WRITE,
-		   MAP_PRIVATE | MAP_ANONYMOUS,
-		   -1, 0);
 
-	if (mem == (void *) -1)
+	mem = mmap(NULL, NRPGS * PGSIZE * 2, PROT_READ | PROT_WRITE,
+			   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+	if (mem == (void *)-1)
 		return -1;
 
 	prime_memory();

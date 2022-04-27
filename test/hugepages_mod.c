@@ -13,11 +13,12 @@ MODULE_DESCRIPTION("hugepages_mod");
 static unsigned long vmcs_read64(unsigned long field)
 {
 	unsigned long value;
-	asm volatile (ASM_VMX_VMREAD_RDX_RAX : "=a"(value) : "d"(field) : "cc");
+	asm volatile(ASM_VMX_VMREAD_RDX_RAX : "=a"(value) : "d"(field) : "cc");
 	return value;
 }
 
-static long hugepages_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
+static long hugepages_ioctl(struct file *filp, unsigned int ioctl,
+							unsigned long arg)
 {
 	long r = -EINVAL;
 	unsigned long cr3, addr, data, eptp;
@@ -64,12 +65,12 @@ out:
 }
 
 static const struct file_operations chardev_ops = {
-	.owner		= THIS_MODULE,
-	.unlocked_ioctl	= hugepages_ioctl,
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = hugepages_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl	= hugepages_ioctl,
+	.compat_ioctl = hugepages_ioctl,
 #endif
-	.llseek		= noop_llseek,
+	.llseek = noop_llseek,
 };
 
 static struct miscdevice dev = {

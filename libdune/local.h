@@ -2,10 +2,9 @@
  * local.h - internal definitions
  */
 
-
 // standard definitions
-#define __str_t(x...)	#x
-#define __str(x...)	__str_t(x)
+#define __str_t(x...) #x
+#define __str(x...)	  __str_t(x)
 extern int arch_prctl(int code, unsigned long *addr);
 
 // assembly routines from dune.S

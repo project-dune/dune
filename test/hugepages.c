@@ -11,8 +11,8 @@
 #include "libdune/dune.h"
 #include "hugepages.h"
 
-#define MAP_HUGE_SHIFT	26
-#define MAP_HUGE_1GB	(30 << MAP_HUGE_SHIFT)
+#define MAP_HUGE_SHIFT 26
+#define MAP_HUGE_1GB   (30 << MAP_HUGE_SHIFT)
 
 static int errors;
 
@@ -67,7 +67,8 @@ static int host_page_order(int fd, ptent_t *root, unsigned long addr)
 	return level;
 }
 
-static void *prepare(char *title, void *addr, size_t size, int flags, int advise_huge, int perm)
+static void *prepare(char *title, void *addr, size_t size, int flags,
+					 int advise_huge, int perm)
 {
 	int ok;
 	char *msg = "%s - %-16s";
@@ -75,7 +76,8 @@ static void *prepare(char *title, void *addr, size_t size, int flags, int advise
 	if (addr)
 		flags |= MAP_FIXED;
 
-	addr = mmap(addr, size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|flags, -1, 0);
+	addr = mmap(addr, size, PROT_READ | PROT_WRITE,
+				MAP_ANONYMOUS | MAP_PRIVATE | flags, -1, 0);
 	if (addr == MAP_FAILED) {
 		perror("mmap");
 		exit(1);
@@ -87,7 +89,9 @@ static void *prepare(char *title, void *addr, size_t size, int flags, int advise
 			exit(1);
 		}
 	}
-	ok = !dune_vm_map_phys(pgroot, addr, size, (void *)dune_mmap_addr_to_pa(addr), PERM_R | PERM_W | perm);
+	ok = !dune_vm_map_phys(pgroot, addr, size,
+						   (void *)dune_mmap_addr_to_pa(addr),
+						   PERM_R | PERM_W | perm);
 	test(ok, msg, title, "dune_vm_map_phys");
 	*((char *)addr) = 0;
 
@@ -124,7 +128,8 @@ static void test_extended(char *title, void *addr, int expected_order, int fd)
 		perror("ioctl(HUGEPAGES_GET_EPTP)");
 		exit(1);
 	}
-	order = host_page_order(fd, (unsigned long *)eptp, dune_mmap_addr_to_pa(addr));
+	order =
+		host_page_order(fd, (unsigned long *)eptp, dune_mmap_addr_to_pa(addr));
 	test(order == expected_order, "%s - %-16s", title, "extended");
 }
 
@@ -147,30 +152,34 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	align = 1<<30;
+	align = 1 << 30;
 	base = (mmap_base & ~(align - 1)) + align;
 
-	p4k = prepare("4KB", NULL, 1<<12, 0, 0, 0);
+	p4k = prepare("4KB", NULL, 1 << 12, 0, 0, 0);
 	test_guest("4KB", p4k, 0);
 	test_host("4KB", p4k, 0, fd);
 	test_extended("4KB", p4k, 0, fd);
 
-	p2m = prepare("2MB", (void *)(base+align*0), 1<<21, MAP_HUGETLB, 0, PERM_BIG);
+	p2m = prepare("2MB", (void *)(base + align * 0), 1 << 21, MAP_HUGETLB, 0,
+				  PERM_BIG);
 	test_guest("2MB", p2m, 1);
 	test_host("2MB", p2m, 1, fd);
 	test_extended("2MB", p2m, 1, fd);
 
-	p1g = prepare("1GB", (void *)(base+align*1), 1<<30, MAP_HUGETLB|MAP_HUGE_1GB, 0, PERM_BIG_1GB);
+	p1g = prepare("1GB", (void *)(base + align * 1), 1 << 30,
+				  MAP_HUGETLB | MAP_HUGE_1GB, 0, PERM_BIG_1GB);
 	test_guest("1GB", p1g, 2);
 	test_host("1GB", p1g, 2, fd);
 	test_extended("1GB", p1g, 2, fd);
 
-	p2m_trans = prepare("2MB (transparent)", (void *)(base+align*2), 1<<21, 0, 1, PERM_BIG);
+	p2m_trans = prepare("2MB (transparent)", (void *)(base + align * 2),
+						1 << 21, 0, 1, PERM_BIG);
 	test_guest("2MB (transparent)", p2m_trans, 1);
 	test_host("2MB (transparent)", p2m_trans, 1, fd);
 	test_extended("2MB (transparent)", p2m_trans, 1, fd);
 
-	p1g_trans = prepare("1GB (transparent)", (void *)(base+align*3), 1<<30, 0, 1, PERM_BIG_1GB);
+	p1g_trans = prepare("1GB (transparent)", (void *)(base + align * 3),
+						1 << 30, 0, 1, PERM_BIG_1GB);
 	test_guest("1GB (transparent)", p1g_trans, 2);
 	test_host("1GB (transparent)", p1g_trans, 1, fd);
 	test_extended("1GB (transparent)", p1g_trans, 1, fd);

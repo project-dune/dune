@@ -43,7 +43,7 @@ static int dune_is_in_guest(void)
 
 static int dune_is_user_mode(void)
 {
-        return 0;
+	return 0;
 }
 
 static unsigned long dune_get_guest_ip(void)
@@ -55,9 +55,9 @@ static unsigned long dune_get_guest_ip(void)
 }
 
 static struct perf_guest_info_callbacks dune_guest_cbs = {
-        .is_in_guest            = dune_is_in_guest,
-        .is_user_mode           = dune_is_user_mode,
-        .get_guest_ip           = dune_get_guest_ip,
+	.is_in_guest = dune_is_in_guest,
+	.is_user_mode = dune_is_user_mode,
+	.get_guest_ip = dune_get_guest_ip,
 };
 
 static int dune_enter(struct dune_config *conf, int64_t *ret)
@@ -65,8 +65,8 @@ static int dune_enter(struct dune_config *conf, int64_t *ret)
 	return vmx_launch(conf, ret);
 }
 
-static long dune_dev_ioctl(struct file *filp,
-			  unsigned int ioctl, unsigned long arg)
+static long dune_dev_ioctl(struct file *filp, unsigned int ioctl,
+						   unsigned long arg)
 {
 	long r = -EINVAL;
 	struct dune_config conf;
@@ -74,8 +74,8 @@ static long dune_dev_ioctl(struct file *filp,
 
 	switch (ioctl) {
 	case DUNE_ENTER:
-		r = copy_from_user(&conf, (int __user *) arg,
-				   sizeof(struct dune_config));
+		r = copy_from_user(&conf, (int __user *)arg,
+						   sizeof(struct dune_config));
 		if (r) {
 			r = -EIO;
 			goto out;
@@ -85,8 +85,7 @@ static long dune_dev_ioctl(struct file *filp,
 		if (r)
 			break;
 
-		r = copy_to_user((void __user *)arg, &conf,
-				 sizeof(struct dune_config));
+		r = copy_to_user((void __user *)arg, &conf, sizeof(struct dune_config));
 		if (r) {
 			r = -EIO;
 			goto out;
@@ -95,7 +94,7 @@ static long dune_dev_ioctl(struct file *filp,
 
 	case DUNE_GET_SYSCALL:
 		rdmsrl(MSR_LSTAR, r);
-		printk(KERN_INFO "R %lx\n", (unsigned long) r);
+		printk(KERN_INFO "R %lx\n", (unsigned long)r);
 		break;
 
 	case DUNE_GET_LAYOUT:
@@ -103,7 +102,7 @@ static long dune_dev_ioctl(struct file *filp,
 		layout.base_map = LG_ALIGN(current->mm->mmap_base) - GPA_MAP_SIZE;
 		layout.base_stack = LG_ALIGN(current->mm->start_stack) - GPA_STACK_SIZE;
 		r = copy_to_user((void __user *)arg, &layout,
-				 sizeof(struct dune_layout));
+						 sizeof(struct dune_layout));
 		if (r) {
 			r = -EIO;
 			goto out;
@@ -133,13 +132,13 @@ static int dune_dev_release(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations dune_chardev_ops = {
-	.owner		= THIS_MODULE,
-	.unlocked_ioctl	= dune_dev_ioctl,
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = dune_dev_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl	= dune_dev_ioctl,
+	.compat_ioctl = dune_dev_ioctl,
 #endif
-	.llseek		= noop_llseek,
-	.release	= dune_dev_release,
+	.llseek = noop_llseek,
+	.release = dune_dev_release,
 };
 
 static struct miscdevice dune_dev = {

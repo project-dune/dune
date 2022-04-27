@@ -13,7 +13,7 @@ static void recover(void)
 static void divide_by_zero_handler(struct dune_tf *tf)
 {
 	printf("hello: caught divide by zero!\n");
-	tf->rip = (uintptr_t) &recover;
+	tf->rip = (uintptr_t)&recover;
 }
 
 int main(int argc, char *argv[])
@@ -38,4 +38,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-

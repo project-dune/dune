@@ -4,7 +4,7 @@
 #include "libdune/dune.h"
 #include "bench.h"
 
-#define MAP_ADDR	0x400000000000
+#define MAP_ADDR 0x400000000000
 
 static char *mem;
 unsigned long trap_tsc, overhead;
@@ -18,18 +18,17 @@ static void prime_memory(void)
 	}
 }
 
-static void
-benchmark1_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
+static void benchmark1_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 {
 	ptent_t *pte;
 	int accessed;
 
 	time += rdtscllp() - trap_tsc;
 
-	dune_vm_lookup(pgroot, (void *) addr, 0, &pte);
+	dune_vm_lookup(pgroot, (void *)addr, 0, &pte);
 	*pte |= PTE_P | PTE_W | PTE_U | PTE_A | PTE_D;
 
-	dune_vm_lookup(pgroot, (void *) addr + NRPGS * PGSIZE, 0, &pte);
+	dune_vm_lookup(pgroot, (void *)addr + NRPGS * PGSIZE, 0, &pte);
 	accessed = *pte & PTE_A;
 	*pte = PTE_ADDR(*pte);
 	if (accessed)
@@ -46,12 +45,11 @@ static void benchmark1(void)
 	}
 }
 
-static void
-benchmark2_handler(uintptr_t addr, uint64_t fec,  struct dune_tf *tf)
+static void benchmark2_handler(uintptr_t addr, uint64_t fec, struct dune_tf *tf)
 {
 	ptent_t *pte;
 
-	dune_vm_lookup(pgroot, (void *) addr, 0, &pte);
+	dune_vm_lookup(pgroot, (void *)addr, 0, &pte);
 	*pte |= PTE_P | PTE_W | PTE_U | PTE_A | PTE_D;
 }
 
@@ -59,7 +57,7 @@ static void benchmark2(void)
 {
 	int i;
 
-	dune_vm_mprotect(pgroot, (void *) MAP_ADDR, PGSIZE * NRPGS, PERM_R);
+	dune_vm_mprotect(pgroot, (void *)MAP_ADDR, PGSIZE * NRPGS, PERM_R);
 
 	for (i = 0; i < NRPGS; i++) {
 		mem[i * PGSIZE] = i;
@@ -78,12 +76,13 @@ static void benchmark_syscall(void)
 		int ret;
 
 		asm volatile("movq $39, %%rax \n\t" // get_pid
-		"vmcall \n\t"
-		"mov %%eax, %0 \n\t" :
-		"=r" (ret) :: "rax");
+					 "vmcall \n\t"
+					 "mov %%eax, %0 \n\t"
+					 : "=r"(ret)::"rax");
 	}
 
-	dune_printf("System call took %ld cycles\n", (rdtscllp() - ticks - overhead) / N);
+	dune_printf("System call took %ld cycles\n",
+				(rdtscllp() - ticks - overhead) / N);
 }
 
 static void benchmark_fault(void)
@@ -91,7 +90,7 @@ static void benchmark_fault(void)
 	int i;
 	unsigned long ticks;
 	char *fm = dune_mmap(NULL, N * PGSIZE, PROT_READ | PROT_WRITE,
-			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+						 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
 	synch_tsc();
 	ticks = dune_get_ticks();
@@ -99,7 +98,8 @@ static void benchmark_fault(void)
 		fm[i * PGSIZE] = i;
 	}
 
-	dune_printf("Kernel fault took %ld cycles\n", (rdtscllp() - ticks - overhead) / N);
+	dune_printf("Kernel fault took %ld cycles\n",
+				(rdtscllp() - ticks - overhead) / N);
 }
 
 static void benchmark_appel1(void)
@@ -110,7 +110,7 @@ static void benchmark_appel1(void)
 	dune_register_pgflt_handler(benchmark1_handler);
 
 	for (i = 0; i < N; i++) {
-		dune_vm_mprotect(pgroot, (void *) MAP_ADDR, PGSIZE * NRPGS, PERM_R);
+		dune_vm_mprotect(pgroot, (void *)MAP_ADDR, PGSIZE * NRPGS, PERM_R);
 
 		synch_tsc();
 		time = 0;
@@ -133,8 +133,8 @@ static void benchmark_appel2(void)
 	dune_register_pgflt_handler(benchmark2_handler);
 
 	for (i = 0; i < N; i++) {
-		dune_vm_mprotect(pgroot, (void *) MAP_ADDR,
-				 PGSIZE * NRPGS * 2, PERM_R | PERM_W);
+		dune_vm_mprotect(pgroot, (void *)MAP_ADDR, PGSIZE * NRPGS * 2,
+						 PERM_R | PERM_W);
 		prime_memory();
 
 		synch_tsc();
@@ -164,16 +164,14 @@ int main(int argc, char *argv[])
 	benchmark_syscall();
 	benchmark_fault();
 
-	ret = dune_vm_map_pages(pgroot,
-                           (void *) MAP_ADDR,
-			               2 * NRPGS * PGSIZE,
-			               PERM_R | PERM_W);
+	ret = dune_vm_map_pages(pgroot, (void *)MAP_ADDR, 2 * NRPGS * PGSIZE,
+							PERM_R | PERM_W);
 	if (ret) {
 		printf("failed to setup memory mapping\n");
 		return ret;
 	}
 
-	mem = (void *) MAP_ADDR;
+	mem = (void *)MAP_ADDR;
 	prime_memory();
 
 	benchmark_appel1();

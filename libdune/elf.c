@@ -22,9 +22,9 @@ static int elf_read(struct dune_elf *elf, void *dst, int len, int off)
 
 	if (elf->mem == NULL)
 		return pread(elf->fd, dst, len, off);
-		
+
 	rd = elf->len - off;
-	
+
 	if (rd <= 0)
 		return 0;
 
@@ -60,11 +60,10 @@ int dune_elf_load_ph(struct dune_elf *elf, Elf64_Phdr *phdr, off_t off)
 	if (phdr->p_flags & PF_W)
 		prot |= PROT_WRITE;
 
-	ptr = mmap((void *) (PGADDR(phdr->p_vaddr) + off),
-		   phdr->p_filesz + PGOFF(phdr->p_vaddr),
-		   prot, MAP_FIXED | MAP_PRIVATE,
-		   elf->fd, PGADDR(phdr->p_offset));
-	if (ptr != (void *) (PGADDR(phdr->p_vaddr) + off))
+	ptr = mmap((void *)(PGADDR(phdr->p_vaddr) + off),
+			   phdr->p_filesz + PGOFF(phdr->p_vaddr), prot,
+			   MAP_FIXED | MAP_PRIVATE, elf->fd, PGADDR(phdr->p_offset));
+	if (ptr != (void *)(PGADDR(phdr->p_vaddr) + off))
 		return -ENOMEM;
 
 	if (phdr->p_memsz > phdr->p_filesz) {
@@ -76,22 +75,20 @@ int dune_elf_load_ph(struct dune_elf *elf, Elf64_Phdr *phdr, off_t off)
 		// this is really stupid, but basically we have
 		// to manually zero the bits that aren't page aligned :(
 		if (start < map_start) {
-			if (mod_prot &&
-			    mprotect((void *) (map_start - PGSIZE),
-				     PGSIZE, prot | PROT_WRITE))
+			if (mod_prot && mprotect((void *)(map_start - PGSIZE), PGSIZE,
+									 prot | PROT_WRITE))
 				return -ENOMEM;
 
-			memset((void *) start, 0, map_start - start);
+			memset((void *)start, 0, map_start - start);
 
 			if (mod_prot &&
-			    mprotect((void *) (map_start - PGSIZE),
-				     PGSIZE, prot))
+				mprotect((void *)(map_start - PGSIZE), PGSIZE, prot))
 				return -ENOMEM;
 		}
 
-		ptr = mmap((void *) map_start, zero_len, prot,
-			   MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
-		if (ptr != (void *) map_start)
+		ptr = mmap((void *)map_start, zero_len, prot,
+				   MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
+		if (ptr != (void *)map_start)
 			return -ENOMEM;
 	}
 
@@ -117,7 +114,7 @@ static int elf_open_phs(struct dune_elf *elf)
 	if (!phdr)
 		return -ENOMEM;
 
-	ret = pread(elf->fd, (void *) phdr, len, elf->hdr.e_phoff);
+	ret = pread(elf->fd, (void *)phdr, len, elf->hdr.e_phoff);
 	if (ret != len) {
 		printf("elf: failed to read program header table\n");
 		free(phdr);
@@ -178,7 +175,7 @@ static int elf_open_shs(struct dune_elf *elf)
 	if (!shdr)
 		return -ENOMEM;
 
-	ret = elf_read(elf, (void *) shdr, len, elf->hdr.e_shoff);
+	ret = elf_read(elf, (void *)shdr, len, elf->hdr.e_shoff);
 	if (ret != len) {
 		printf("elf: failed to read section header table\n");
 		free(shdr);
@@ -201,8 +198,8 @@ static int elf_open_shs(struct dune_elf *elf)
 		free(shdr);
 		return -ENOMEM;
 	}
-	ret = elf_read(elf, (void *) strtab, strtablen,
-			    shdr[elf->hdr.e_shstrndx].sh_offset);
+	ret = elf_read(elf, (void *)strtab, strtablen,
+				   shdr[elf->hdr.e_shstrndx].sh_offset);
 	if (ret != strtablen) {
 		printf("elf: failed to read section header string table\n");
 		free(shdr);
@@ -256,21 +253,18 @@ static int do_elf_open(struct dune_elf *elf)
 	Elf64_Ehdr hdr;
 	int ret;
 
-	ret = elf_read(elf, (void *) &hdr, sizeof(Elf64_Ehdr), 0);
+	ret = elf_read(elf, (void *)&hdr, sizeof(Elf64_Ehdr), 0);
 	if (ret != sizeof(Elf64_Ehdr)) {
 		printf("elf: failed to read header\n");
 		ret = -EIO;
 		goto out;
 	}
 
-	if (hdr.e_ident[EI_MAG0] != ELFMAG0 ||
-	    hdr.e_ident[EI_MAG1] != ELFMAG1 ||
-	    hdr.e_ident[EI_MAG2] != ELFMAG2 ||
-	    hdr.e_ident[EI_MAG3] != ELFMAG3 ||
-	    hdr.e_ident[EI_CLASS] != ELFCLASS64 ||
-	    hdr.e_ident[EI_DATA] != ELFDATA2LSB ||
-	    hdr.e_ident[EI_VERSION] != EV_CURRENT ||
-	    hdr.e_version != EV_CURRENT) {
+	if (hdr.e_ident[EI_MAG0] != ELFMAG0 || hdr.e_ident[EI_MAG1] != ELFMAG1 ||
+		hdr.e_ident[EI_MAG2] != ELFMAG2 || hdr.e_ident[EI_MAG3] != ELFMAG3 ||
+		hdr.e_ident[EI_CLASS] != ELFCLASS64 ||
+		hdr.e_ident[EI_DATA] != ELFDATA2LSB ||
+		hdr.e_ident[EI_VERSION] != EV_CURRENT || hdr.e_version != EV_CURRENT) {
 		printf("elf: failed image sanity check\n");
 		ret = -EINVAL;
 		goto out;
@@ -310,7 +304,7 @@ int dune_elf_open(struct dune_elf *elf, const char *path)
 		return -EIO;
 	}
 
-	elf->fd  = fd;
+	elf->fd = fd;
 	elf->mem = NULL;
 	elf->len = 0;
 
@@ -319,7 +313,7 @@ int dune_elf_open(struct dune_elf *elf, const char *path)
 
 int dune_elf_open_mem(struct dune_elf *elf, void *mem, int len)
 {
-	elf->fd  = -1;
+	elf->fd = -1;
 	elf->mem = mem;
 	elf->len = len;
 
@@ -352,30 +346,29 @@ int dune_elf_close(struct dune_elf *elf)
 }
 
 static const char *ShdrTypes[SHT_NUM] = {
-	"NULL", "PROGBITS", "SYMTAB", "STRTAB", "RELA", "HASH", "DYNAMIC",
-	"NOTE", "NOBITS", "REL", "SHLIB", "DYNSYM", "INIT_ARRAY", "FINI_ARRAY",
-	"PREINIT_ARRAY", "GROUP", "SYMTAB_SHNDX",
+	"NULL",	 "PROGBITS",	 "SYMTAB",	   "STRTAB",	 "RELA",
+	"HASH",	 "DYNAMIC",		 "NOTE",	   "NOBITS",	 "REL",
+	"SHLIB", "DYNSYM",		 "INIT_ARRAY", "FINI_ARRAY", "PREINIT_ARRAY",
+	"GROUP", "SYMTAB_SHNDX",
 };
 
-static int elf_dump_sh(struct dune_elf *elf,
-		       const char *sname,
-		       int snum,
-		       Elf64_Shdr *shdr)
+static int elf_dump_sh(struct dune_elf *elf, const char *sname, int snum,
+					   Elf64_Shdr *shdr)
 {
 	const char *type = "UNKNOWN";
 	if (shdr->sh_type < SHT_NUM)
 		type = ShdrTypes[shdr->sh_type];
 
-	dune_printf("  [%2d] %-16s %-16s %016llx %08x\n",
-			   snum, sname, type, shdr->sh_addr, shdr->sh_offset);
+	dune_printf("  [%2d] %-16s %-16s %016llx %08x\n", snum, sname, type,
+				shdr->sh_addr, shdr->sh_offset);
 	dune_printf("       %016llx %016llx %c%c%c%c%c %4d %4d %5d\n",
-			   shdr->sh_size, shdr->sh_entsize,
-			   shdr->sh_flags & SHF_WRITE ? 'W' : ' ',
-			   shdr->sh_flags & SHF_ALLOC ? 'A' : ' ',
-			   shdr->sh_flags & SHF_EXECINSTR ? 'X' : ' ',
-			   shdr->sh_flags & SHF_MERGE ? 'M' : ' ',
-			   shdr->sh_flags & SHF_STRINGS ? 'S' : ' ',
-			   shdr->sh_link, shdr->sh_info, shdr->sh_addralign);
+				shdr->sh_size, shdr->sh_entsize,
+				shdr->sh_flags & SHF_WRITE ? 'W' : ' ',
+				shdr->sh_flags & SHF_ALLOC ? 'A' : ' ',
+				shdr->sh_flags & SHF_EXECINSTR ? 'X' : ' ',
+				shdr->sh_flags & SHF_MERGE ? 'M' : ' ',
+				shdr->sh_flags & SHF_STRINGS ? 'S' : ' ', shdr->sh_link,
+				shdr->sh_info, shdr->sh_addralign);
 
 	return 0;
 }
@@ -391,15 +384,12 @@ static int elf_dump_ph(struct dune_elf *elf, Elf64_Phdr *phdr)
 	if (phdr->p_type < PT_NUM)
 		type = PhdrType[phdr->p_type];
 
-	dune_printf("  %-20s 0x%016llx 0x%016llx 0x%016llx\n",
-			   type, phdr->p_offset,
-			   phdr->p_vaddr, phdr->p_paddr);
-	dune_printf("  %-20s 0x%016llx 0x%016llx  %c%c%c    %x\n",
-			   "", phdr->p_filesz, phdr->p_memsz,
-			   phdr->p_flags & PF_R ? 'R' : ' ',
-			   phdr->p_flags & PF_W ? 'W' : ' ',
-			   phdr->p_flags & PF_X ? 'X' : ' ',
-			   phdr->p_align);
+	dune_printf("  %-20s 0x%016llx 0x%016llx 0x%016llx\n", type, phdr->p_offset,
+				phdr->p_vaddr, phdr->p_paddr);
+	dune_printf("  %-20s 0x%016llx 0x%016llx  %c%c%c    %x\n", "",
+				phdr->p_filesz, phdr->p_memsz, phdr->p_flags & PF_R ? 'R' : ' ',
+				phdr->p_flags & PF_W ? 'W' : ' ',
+				phdr->p_flags & PF_X ? 'X' : ' ', phdr->p_align);
 
 	return 0;
 }
@@ -419,20 +409,20 @@ int dune_elf_dump(struct dune_elf *elf)
 	// XXX: Dump Header
 
 	dune_printf("Section Headers:\n");
-	dune_printf("  [Nr] %-16s %-16s %-16s %s\n",
-			   "Name", "Type", "Address", "Offset");
-	dune_printf("       %-16s %-16s %s %s %s  %s\n",
-			   "Size", "EntSize", "Flags", "Link", "Info", "Align");
+	dune_printf("  [Nr] %-16s %-16s %-16s %s\n", "Name", "Type", "Address",
+				"Offset");
+	dune_printf("       %-16s %-16s %s %s %s  %s\n", "Size", "EntSize", "Flags",
+				"Link", "Info", "Align");
 	if ((ret = dune_elf_iter_sh(elf, &elf_dump_sh))) {
 		printf("elf: failed to dump section headers\n");
 		goto out;
 	}
 
 	dune_printf("Program Headers:\n");
-	dune_printf("  %-20s %-18s %-18s %s\n",
-			   "Type", "Offset", "VirtAddr", "PhysAddr");
-	dune_printf("  %-20s %-18s %-18s %s   %s\n",
-			   "", "FileSiz", "MemSize", "Flags", "Align");
+	dune_printf("  %-20s %-18s %-18s %s\n", "Type", "Offset", "VirtAddr",
+				"PhysAddr");
+	dune_printf("  %-20s %-18s %-18s %s   %s\n", "", "FileSiz", "MemSize",
+				"Flags", "Align");
 	if ((ret = dune_elf_iter_ph(elf, &elf_dump_ph))) {
 		printf("elf: failed to dump program headers\n");
 		goto out;
@@ -441,5 +431,3 @@ int dune_elf_dump(struct dune_elf *elf)
 out:
 	return ret;
 }
-
-
