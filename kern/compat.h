@@ -24,7 +24,6 @@
 #define VMX_EPT_GAW_EPTP_SHIFT 3
 
 #define SECONDARY_EXEC_RDTSCP          SECONDARY_EXEC_ENABLE_RDTSCP
-#define VMX_EPT_AD_ENABLE_BIT          VMX_EPTP_AD_ENABLE_BIT
 #define VMX_EPT_EXTENT_INDIVIDUAL_ADDR 0
 
 #define read_cr3                       __read_cr3
@@ -71,6 +70,9 @@ static inline bool dune_tboot_enabled(void)
 
 #if !defined(VMX_EPT_AD_BIT)
 #define VMX_EPT_AD_BIT          (1ull << 21)
+#endif
+
+#if !defined(VMX_EPT_AD_ENABLE_BIT)
 #define VMX_EPT_AD_ENABLE_BIT   (1ull << 6)
 #endif
 
