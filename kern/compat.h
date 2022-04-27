@@ -48,6 +48,15 @@ typedef struct ldttss_desc ldttss_desc_t;
 typedef struct ldttss_desc64 ldttss_desc_t;
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0) & defined(TBOOT_ENABLED)
+typedef bool (*tboot_enabled_type)(void);
+static tboot_enabled_type __tboot_enabled = (tboot_enabled_type)TBOOT_ENABLED;
+static inline bool dune_tboot_enabled(void)
+{
+    return __tboot_enabled();
+}
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 #include <asm/fpu/api.h>
 #else

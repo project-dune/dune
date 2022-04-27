@@ -1714,7 +1714,7 @@ static __init int __vmx_enable(struct vmcs *vmxon_buf)
 
 	test_bits = FEATURE_CONTROL_LOCKED;
 	test_bits |= FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX;
-	if (tboot_enabled())
+	if (dune_tboot_enabled())
 		test_bits |= FEATURE_CONTROL_VMXON_ENABLED_INSIDE_SMX;
 
 	if ((old & test_bits) != test_bits) {

@@ -25,8 +25,9 @@ KMISC_INC := /lib/modules/$(KVER)/include
 
 SYSCALL_TBL = 0x$(shell $(EXTRACT) sys_call_table)
 KERNEL_CLONE = 0x$(shell $(EXTRACT) kernel_clone)
+TBOOT_ENABLED = 0x$(shell $(EXTRACT) tboot_enabled)
 
-CFLAGS_vmx.o = -DSYSCALL_TBL=$(SYSCALL_TBL) -DKERNEL_CLONE=$(KERNEL_CLONE)
+CFLAGS_vmx.o = -DSYSCALL_TBL=$(SYSCALL_TBL) -DKERNEL_CLONE=$(KERNEL_CLONE) -DTBOOT_ENABLED=$(TBOOT_ENABLED)
 
 # KSRC_OUTPUT should be overridden if you are using a 2.6 kernel that
 # has it's output sent elsewhere via KBUILD_OUTPUT= or O=
