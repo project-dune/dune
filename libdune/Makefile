@@ -1,4 +1,4 @@
-CC      = gcc
+CC      = gcc -fPIC
 CFLAGS  = -Wall -g -O3 -MD
 LDFLAGS = -static -L. -ldune
 OBJ     = entry.o dune.o vsyscall.o elf.o vm.o util.o page.o procmap.o debug.o
@@ -10,6 +10,9 @@ all: libdune.a
 
 libdune.a: $(OBJ) $(NOFPU_OBJ)
 	$(AR) crD $(@) $(OBJ) $(NOFPU_OBJ)
+
+libdune.so: $(OBJ) $(NOFPU_OBJ)
+	$(CC) -shared -o $@ $(OBJ) $(NOFPU_OBJ)
 
 clean:
 	rm -f *.o test *.d libdune.a

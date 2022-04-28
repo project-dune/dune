@@ -151,38 +151,37 @@ static int dune_boot(struct dune_percpu *percpu)
 	_idtr.base = (uint64_t)&idt;
 	_idtr.limit = sizeof(idt) - 1;
 
+	// clang-format off
 	asm volatile(
 		// STEP 1: load the new GDT
 		"lgdt %0\n"
 
 		// STEP 2: initialize data segements
-		"mov $" __str(
-			GD_KD) ", %%ax\n"
-				   "mov %%ax, %%ds\n"
-				   "mov %%ax, %%es\n"
-				   "mov %%ax, %%ss\n"
+		"mov $" __str(GD_KD) ", %%ax\n"
+		"mov %%ax, %%ds\n"
+		"mov %%ax, %%es\n"
+		"mov %%ax, %%ss\n"
 
-				   // STEP 3: long jump into the new code segment
-				   "mov $" __str(
-					   GD_KT) ", %%rax\n"
-							  "pushq %%rax\n"
-							  "pushq $1f\n"
-							  "lretq\n"
-							  "1:\n"
-							  "nop\n"
+		// STEP 3: long jump into the new code segment
+		"mov $" __str(GD_KT) ", %%rax\n"
+		"pushq %%rax\n"
+		"pushq $1f\n"
+		"lretq\n"
+		"1:\n"
+		"nop\n"
 
-							  // STEP 4: load the task register (for safe stack switching)
-							  "mov $" __str(
-								  GD_TSS) ", %%ax\n"
-										  "ltr %%ax\n"
+		// STEP 4: load the task register (for safe stack switching)
+		"mov $" __str(GD_TSS) ", %%ax\n"
+		"ltr %%ax\n"
 
-										  // STEP 5: load the new IDT and enable interrupts
-										  "lidt %1\n"
-										  "sti\n"
+		// STEP 5: load the new IDT and enable interrupts
+		"lidt %1\n"
+		"sti\n"
 
 		:
 		: "m"(_gdtr), "m"(_idtr)
 		: "rax");
+	// clang-format on
 
 	// STEP 6: FS and GS require special initialization on 64-bit
 	wrmsrl(MSR_FS_BASE, percpu->kfs_base);
@@ -527,10 +526,10 @@ void on_dune_exit(struct dune_config *conf)
  * dune_enter - transitions a process to "Dune mode"
  *
  * Can only be called after dune_init().
- * 
+ *
  * Use this function in each forked child and/or each new thread
  * if you want to re-enter "Dune mode".
- * 
+ *
  * Returns 0 on success, otherwise failure.
  */
 int dune_enter(void)
@@ -581,9 +580,9 @@ int dune_enter_ex(void *percpu)
 
 /**
  * dune_init - initializes libdune
- * 
+ *
  * @map_full: determines if the full process address space should be mapped
- * 
+ *
  * Call this function once before using libdune.
  *
  * Dune supports two memory modes. If map_full is true, then every possible
@@ -591,7 +590,7 @@ int dune_enter_ex(void *percpu)
  * that are used (e.g. set up through mmap) are mapped. Full mapping consumes
  * a lot of memory when enabled, but disabling it incurs slight overhead
  * since pages will occasionally need to be faulted in.
- * 
+ *
  * Returns 0 on success, otherwise failure.
  */
 int dune_init(bool map_full)
