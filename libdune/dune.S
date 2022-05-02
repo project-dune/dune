@@ -318,7 +318,7 @@ __dune_syscall:
 	/* then finally re-enable interrupts and jump to the handler */
 	sti
 	movq	%rsp, %rdi /* argument 0 */
-	lea	dune_syscall_handler, %rax
+	lea	dune_syscall_handler@GOT, %rax
 	call	*%rax
 
 	/* next restore the CPL3 FS base address */
@@ -381,7 +381,7 @@ dune_ret_from_user:
 	movq	%rsi, RAX(%rdi)
 
 	/* fill in remaining exception frame data */
-	lea	dune_ret_from_user_finish, %rax
+	lea	dune_ret_from_user_finish@GOT, %rax
 	movq	%rax, RIP(%rdi)
 	movq	$GD_KT, CS(%rdi)
 	movq	$GD_KD, SS(%rdi)

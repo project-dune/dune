@@ -165,7 +165,7 @@ static int dune_boot(struct dune_percpu *percpu)
 		// STEP 3: long jump into the new code segment
 		"mov $" __str(GD_KT) ", %%rax\n"
 		"pushq %%rax\n"
-		"pushq $1f\n"
+		"pushq 1f(%%rip)\n"
 		"lretq\n"
 		"1:\n"
 		"nop\n"

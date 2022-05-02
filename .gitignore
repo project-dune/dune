@@ -1,6 +1,7 @@
 *.o
 *.d
 *.a
+*.so
 *.swp
 *.hi
 *.cmd
@@ -30,3 +31,5 @@ test/hugepages
 test/mprotect
 test/fork
 tags
+tools/dunify.so
+tools/hello
