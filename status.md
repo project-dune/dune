@@ -39,6 +39,10 @@ If you run into an error, use `sudo dmesg` to show the kernel log, including
 
 So far Linux I have only tested on Linux 5.13.
 
+## Features
+
+* [ ] floating point support.
+
 ## Tests
 
 * [x] `hello` passing.
@@ -80,5 +84,5 @@ PROTN,TRAP,UNPROT took 62111 cycles
 
 Shared library support is in progress on the `shared-dune` branch.
 
-* [x] position-independent `libdune.so`.
-* [ ] running dune executables that are linked with shared libraries.
+* [x] build position-independent `libdune.so`.
+* [ ] running dune programs linked with `libdune.so`.
